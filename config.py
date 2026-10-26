@@ -39,8 +39,8 @@ class Config:
     # Бонус серии "Садовода", см: при серии N дней берётся максимальный ключ <= N
     STREAK_BONUS = {1: 0, 2: 1, 3: 2, 5: 3, 7: 5, 14: 7, 21: 10, 28: 12}
 
-    # Whitelist загружается из текстового файла, одна строка = username без @
-    WHITELIST_FILE = Path(os.getenv("WHITELIST_FILE", "whitelist.txt"))
+    # Whitelist загружается из текстового файла, одна строка = username без @.
+    WHITELIST_FILE = Path(os.getenv("WHITELIST_FILE", "whitelist_tg.txt"))
 
     @staticmethod
     def streak_bonus(streak: int) -> int:
