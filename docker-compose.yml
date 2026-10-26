@@ -1,0 +1,41 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-xmas}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-xmas}
+      POSTGRES_DB: ${POSTGRES_DB:-xmas}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db_init.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-xmas}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Вариант 1: Telegram
+  tg-bot:
+    build: .
+    command: python main.py
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Вариант 2: Яндекс Мессенджер.
+  # Бот должен запускаться с машины, имеющей доступ к bp.mssngr.yandex.net
+  # (внутренняя сеть / VPN). Отключите службу tg-bot, если она не нужна.
+  yim-bot:
+    build: .
+    command: python -m yim
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles: ["yim"]
+volumes:
+  pgdata:
