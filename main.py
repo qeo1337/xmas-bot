@@ -1,5 +1,4 @@
-"""TG-версия бота. Запуск: python main.py
-Версия для Яндекс Мессенджера: python -m yim"""
+"""TG-версия бота. Запуск: python main.py"""
 
 import asyncio
 import logging

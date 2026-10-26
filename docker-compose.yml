@@ -15,7 +15,6 @@ services:
       retries: 10
     restart: unless-stopped
 
-  # Вариант 1: Telegram
   tg-bot:
     build: .
     command: python main.py
@@ -25,17 +24,5 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Вариант 2: Яндекс Мессенджер.
-  # Бот должен запускаться с машины, имеющей доступ к bp.mssngr.yandex.net
-  # (внутренняя сеть / VPN). Отключите службу tg-bot, если она не нужна.
-  yim-bot:
-    build: .
-    command: python -m yim
-    env_file: .env
-    depends_on:
-      db:
-        condition: service_healthy
-    restart: unless-stopped
-    profiles: ["yim"]
 volumes:
   pgdata:

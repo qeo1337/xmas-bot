@@ -41,7 +41,7 @@ def pool() -> asyncpg.Pool:
 
 async def load_whitelist() -> set[str]:
     """Загружает whitelist из файла (если есть) в БД (idempotent).
-    Версии: filename задаётся в WHITELIST_FILE: whitelist_tg.txt или whitelist_yim.txt"""
+    Файл задаётся в WHITELIST_FILE (по умолчанию whitelist_tg.txt)."""
     if not Config.WHITELIST_FILE.exists():
         return set()
     rows = []
