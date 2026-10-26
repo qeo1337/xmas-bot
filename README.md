@@ -56,7 +56,8 @@ docker compose logs -f tg-bot
 | Переменная | Значение по умолчанию |
 |---|---|
 | `TZ_NAME` | Europe/Moscow |
-| `BOT_TOKEN` | — (от @BotFather; ADMIN_IDS — Telegram ID у @userinfobot, через запятую) |
+| `BOT_TOKEN` | — (от @BotFather) |
+| `ADMIN_IDS` | 251656591 (владелец); других админов — через запятую |
 | `DECOR_COOLDOWN_HOURS` | 3 |
 | `SNOWBALLS_PER_DAY` | 3 |
 | `DAY_WINDOW_START` / `DAY_WINDOW_END` | 8 / 23 (часы серии) |
