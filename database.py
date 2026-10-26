@@ -47,13 +47,19 @@ async def load_whitelist() -> set[str]:
     rows = []
     with open(Config.WHITELIST_FILE, encoding="utf-8") as f:
         for line in f:
-            name = line.strip().lstrip("@").lower()
-            if name and not name.startswith("#"):
-                rows.append((name,))
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "|" in line:   # формат: логин|Имя Фамилия
+                name, fio = line.split("|", 1)
+                rows.append((name.strip().lstrip("@").lower(), fio.strip()))
+            else:
+                rows.append((line.lstrip("@").lower(), None))
     if rows:
         async with pool().acquire() as conn:
             await conn.executemany(
-                "INSERT INTO whitelist (username) VALUES ($1) ON CONFLICT DO NOTHING",
+                """INSERT INTO whitelist (username, display_name) VALUES ($1, $2)
+                   ON CONFLICT (username) DO UPDATE SET display_name = EXCLUDED.display_name""",
                 rows,
             )
     return {r[0] for r in rows}
@@ -66,6 +72,16 @@ def registration_state(now: datetime.date) -> str:
     if now <= Config.REGISTRATION_END:
         return "open"
     return "closed"
+
+
+async def whitelist_display_name(username: str | None) -> str | None:
+    """ФИО из whitelist (формат 'логин|Имя Фамилия'), если задано."""
+    if not username:
+        return None
+    async with pool().acquire() as conn:
+        return await conn.fetchval(
+            "SELECT display_name FROM whitelist WHERE username = $1",
+            username.strip().lstrip("@").lower())
 
 
 async def is_whitelisted(username: str | None) -> bool:

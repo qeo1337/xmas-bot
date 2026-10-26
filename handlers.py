@@ -8,7 +8,7 @@ from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
                            Message)
 
 from config import Config, now_local
-from database import (get_user, is_whitelisted, log_event, pool,
+from database import (get_user, is_whitelisted, whitelist_display_name, log_event, pool,
                      registration_state, register_user)
 from game import (fmt_delta, next_decor_at, snowball_left, throw_snowball,
                   user_achievements, decorate, check_achievements)
@@ -70,7 +70,8 @@ async def cmd_start(message: Message):
         return
 
     uname = (message.from_user.username or "").lower()
-    allowed = await is_whitelisted(uname) or uid in Config.ADMIN_IDS
+    wl_name = await whitelist_display_name(uname)
+    allowed = bool(wl_name) or uid in Config.ADMIN_IDS
 
     if not allowed:
         await message.answer(
@@ -92,7 +93,7 @@ async def cmd_start(message: Message):
         await message.answer("🔒 Регистрация закрыта. Админ: /admin_register telegram_id Имя.")
         return
 
-    await register_user(uid, uname, message.from_user.first_name)
+    await register_user(uid, uname, wl_name or message.from_user.first_name)
     await log_event(uid, uname, "register")
     await check_achievements(uid)  # 🎄 «Я в деле!» — за само участие
     await message.answer(
@@ -164,10 +165,10 @@ async def cb_snow_start(cb: CallbackQuery):
                ORDER BY display_name NULLS LAST LIMIT 40""", uid)
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(
-            text=(esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}") + f"  ❄️{left}")[:40],
+            text=esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}")[:40],
             callback_data=f"snow:{r['tg_id']}")]
         for r in rows])
-    await cb.message.answer("❄️ В кого кидаем снежок?", reply_markup=kb)
+    await cb.message.answer(f"❄️ В кого кидаем снежок? (у вас их {left})", reply_markup=kb)
     await cb.answer()
 
 
@@ -191,7 +192,7 @@ async def cb_snow_throw(cb: CallbackQuery):
         await cb.message.answer("🏅 Достижения: " + ", ".join(new_ach))
     try:
         await cb.bot.send_message(
-            target_id, f"❄️ В вашу ёлку прилетел снежок от {name_of(me)}!")
+            target_id, f"❄️ В вас прилетел снежок от {name_of(me)}!")
     except Exception:
         pass
 
@@ -295,7 +296,7 @@ async def cmd_snow(message: Message, command: CommandObject):
     if new_ach:
         await message.answer("🏅 Достижения: " + ", ".join(new_ach))
     try:
-        await message.bot.send_message(t["tg_id"], f"❄️ В вашу ёлку прилетел снежок от {name_of(me)}!")
+        await message.bot.send_message(t["tg_id"], f"❄️ В вас прилетел снежок от {name_of(me)}!")
     except Exception:
         pass
 
@@ -371,12 +372,20 @@ async def cmd_admin_add(message: Message, command: CommandObject):
     if not is_admin(message.from_user.id):
         return
     if not command.args:
-        await message.answer("Использование: /admin_add username")
+        await message.answer("Использование: /admin_add username|Имя Фамилия "
+                             "(или просто username)")
         return
-    uname = command.args.strip().lstrip("@").lower()
+    args = command.args.strip()
+    fio = None
+    if "|" in args:
+        args, fio = args.split("|", 1)
+        fio = fio.strip()
+    uname = args.strip().lstrip("@").lower()
     async with pool().acquire() as conn:
         await conn.execute(
-            "INSERT INTO whitelist (username) VALUES ($1) ON CONFLICT DO NOTHING", uname)
+            """INSERT INTO whitelist (username, display_name) VALUES ($1, $2)
+               ON CONFLICT (username) DO UPDATE SET display_name = EXCLUDED.display_name""",
+            uname, fio)
     await log_event(message.from_user.id, "", "admin_add", uname)
     await message.answer(f"✅ @{uname} добавлен в whitelist.")
 

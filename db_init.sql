@@ -2,8 +2,10 @@
 -- tg_id — числовой идентификатор пользователя платформы (Telegram ID или id из update Мессенджера).
 
 CREATE TABLE IF NOT EXISTS whitelist (
-    username      TEXT PRIMARY KEY     -- в TG-версии: telegram username без @; в версии Мессенджера: staff login
+    username      TEXT PRIMARY KEY,    -- telegram username без @
+    display_name  TEXT                 -- ФИО (опционально, формат строки: логин|Имя Фамилия)
 );
+ALTER TABLE whitelist ADD COLUMN IF NOT EXISTS display_name TEXT;  -- миграция существующих БД
 
 CREATE TABLE IF NOT EXISTS users (
     tg_id            BIGINT PRIMARY KEY,

@@ -35,7 +35,7 @@ def _decor_line(u, now) -> str:
         nxt = next_decor_at(u["last_decor"])
         wait = int((nxt - now).total_seconds())
         tzname = {"Europe/Moscow": "МСК"}.get(Config.TZ.key, Config.TZ.key)
-        return (f"✨ Следующий шар — {nxt.strftime('%H:%M')} ({tzname})"
+        return (f"✨ Следующий шар — {nxt.astimezone(Config.TZ).strftime('%H:%M')} ({tzname})"
                 if wait > 0 else "✨ Можно вешать шар!")
     return "✨ Ёлка пока пустая — повесь первый шар!"
 
@@ -75,9 +75,11 @@ async def stats_text(u) -> str:
         f"🔥 Текущая серия: {u['streak']} дн.\n"
         f"🏆 Лучшая серия: {u['best_streak']} дн.\n"
         f"❄️ Отправлено снежков: {u['snowballs_sent']}\n"
-        f"☃️ Получено снежков: {u['snowballs_recv']}\n"
-        f"🏅 Достижения ({len(ach)}/{len(ACH_DEFS)}): "
-        f"{', '.join(esc(a) for a in ach) if ach else 'пока нет'}")
+        f"☃️ Получено снежков: {u['snowballs_recv']}\n\n"
+        f"🏅 Достижения ({len(ach)}/{len(ACH_DEFS)}):\n"
+        + "\n".join(
+            f"✅ {esc(t)}" if t in ach else "❌ ***"
+            for t in [d[0] for d in ACH_DEFS.values()]))
 
 
 # ------------------------------------------------- анонимная обратная связь
