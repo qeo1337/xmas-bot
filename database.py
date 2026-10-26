@@ -10,6 +10,7 @@ _pool: asyncpg.Pool | None = None
 
 async def init_db() -> asyncpg.Pool:
     global _pool
+
     if _pool is None:
         _pool = await asyncpg.create_pool(
             host=Config.POSTGRES_HOST,
@@ -20,6 +21,16 @@ async def init_db() -> asyncpg.Pool:
             min_size=1,
             max_size=10,
         )
+
+        schema_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "db_init.sql",
+        )
+
+        async with _pool.acquire() as conn:
+            with open(schema_path, encoding="utf-8") as f:
+                await conn.execute(f.read())
+
     return _pool
 
 
