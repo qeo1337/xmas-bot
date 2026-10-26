@@ -139,10 +139,10 @@ async def cb_decor(cb: CallbackQuery):
         lines.append("\n🏅 Достижения: " + ", ".join(new_ach))
     await log_event(uid, before["username"] or "", "decor",
                     f"+{res['balls']} -> {res['ornaments']}")
-    await cb.answer("Шар повешен!")
+    await cb.answer()
+    # результат — отдельным сообщением вниз, меню при этом обновляется (edit)
+    await cb.message.answer("\n".join(lines))
     await show_menu(cb, edit=True)
-    if new_ach:
-        await cb.message.answer("🏅 Новые достижения: " + ", ".join(new_ach))
 
 
 # ---------------------------------------------------------------- снежки

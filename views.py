@@ -34,7 +34,8 @@ def _decor_line(u, now) -> str:
     if u["last_decor"]:
         nxt = next_decor_at(u["last_decor"])
         wait = int((nxt - now).total_seconds())
-        return (f"✨ Следующий шар можно повесить через {fmt_delta(max(wait, 0))}"
+        tzname = {"Europe/Moscow": "МСК"}.get(Config.TZ.key, Config.TZ.key)
+        return (f"✨ Следующий шар — {nxt.strftime('%H:%M')} ({tzname})"
                 if wait > 0 else "✨ Можно вешать шар!")
     return "✨ Ёлка пока пустая — повесь первый шар!"
 
