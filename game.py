@@ -150,7 +150,7 @@ async def throw_snowball(from_id: int, to_id: int) -> dict:
 ACH_DEFS = {
     # code: (заголовок, предикат от row users)
     "take_part": ("🎄 «Я в деле!» — участник ивента", lambda u: True),
-    "first_decor": ("✨ Первый шар", lambda u: u["decor_total"] >= 1),
+    "first_decor": ("🌱 «Три иголки» — первый шар", lambda u: u["decor_total"] >= 1),
     "decor_10": ("✨ 10 украшений", lambda u: u["decor_total"] >= 10),
     "decor_50": ("✨ 50 украшений", lambda u: u["decor_total"] >= 50),
     "streak_3": ("🔥 Серия 3 дня", lambda u: u["best_streak"] >= 3),
@@ -161,10 +161,15 @@ ACH_DEFS = {
     "first_snow": ("❄️ Первый снежок", lambda u: u["snowballs_sent"] >= 1),
     "snow_25": ("❄️ 25 отправленных снежков", lambda u: u["snowballs_sent"] >= 25),
     "recv_25": ("☃️ 25 полученных снежков", lambda u: u["snowballs_recv"] >= 25),
-    "b50": ("🎄 50 шаров", lambda u: u["ornaments"] >= 50),
-    "b100": ("🎄 100 шаров", lambda u: u["ornaments"] >= 100),
-    "b250": ("🎄 250 шаров", lambda u: u["ornaments"] >= 250),
-    "b500": ("🎄 500 шаров", lambda u: u["ornaments"] >= 500),
+    "b50": ("🪴 «Не трогайте, растёт» — 50 шаров", lambda u: u["ornaments"] >= 50),
+    "b100": ("🎄 «Ёлка ёлочная» — 100 шаров", lambda u: u["ornaments"] >= 100),
+    "b250": ("📈 «Что-то пошло не так» — 250 шаров", lambda u: u["ornaments"] >= 250),
+    "b500": ("🚨 «Слишком большая» — 500 шаров", lambda u: u["ornaments"] >= 500),
+    "b750": ("🗿 «Лесной босс» — 750 шаров", lambda u: u["ornaments"] >= 750),
+    "b1000": ("👁️ «Она растёт» — 1000 шаров", lambda u: u["ornaments"] >= 1000),
+    "b1500": ("💀 «Звоните леснику» — 1500 шаров", lambda u: u["ornaments"] >= 1500),
+    "b2000": ("☢️ «Хвойная угроза» — 2000 шаров", lambda u: u["ornaments"] >= 2000),
+    "b2500": ("🌌 «Ёлка космического масштаба» — 2500 шаров", lambda u: u["ornaments"] >= 2500),
 }
 # коды ачивок с прозрачным порогом, для которых нельзя «нагнать» lp
 DISCRETION = {"take_part": "registration"}
