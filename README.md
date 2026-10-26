@@ -62,3 +62,8 @@ docker compose logs -f tg-bot
 | `DAY_WINDOW_START` / `DAY_WINDOW_END` | 8 / 23 (часы серии) |
 | `REGISTRATION_START/END`, `EVENT_START/END` | 27.11–02.12 / 01.12–31.12 |
 | `WHITELIST_FILE` | whitelist_tg.txt (username без `@`) |
+| `DECOR_COOLDOWN_MINUTES` | 0 (не задан); тестовая overrides часов; для теста удобно 5 |
+
+> ⚠️ **Тестовый режим (до 30.10.2026):** `DECOR_COOLDOWN_MINUTES=5` в `.env`
+> и тестовые даты ивента. Перед прод-запуском 27.11 удалить `DECOR_COOLDOWN_MINUTES`
+> и вернуть `DECOR_*` даты ивента.

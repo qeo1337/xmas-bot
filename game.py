@@ -15,7 +15,9 @@ BASE_GROWTH = 1       # базовое число шаров за украшен
 
 
 def next_decor_at(last: datetime.datetime) -> datetime.datetime:
-    return last + datetime.timedelta(hours=Config.DECOR_COOLDOWN_HOURS)
+    minutes = Config.DECOR_COOLDOWN_MINUTES
+    delta = datetime.timedelta(minutes=minutes) if minutes > 0 else datetime.timedelta(hours=Config.DECOR_COOLDOWN_HOURS)
+    return last + delta
 
 
 def fmt_delta(seconds: int) -> str:

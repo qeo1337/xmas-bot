@@ -27,6 +27,8 @@ class Config:
     DAY_WINDOW_START = int(os.getenv("DAY_WINDOW_START", "8"))
     DAY_WINDOW_END = int(os.getenv("DAY_WINDOW_END", "23"))
     DECOR_COOLDOWN_HOURS = int(os.getenv("DECOR_COOLDOWN_HOURS", os.getenv("WATER_COOLDOWN_HOURS", "3")))
+    # Тестовая настройка: если задана, перекрывает часы (в минутах). Прод: не задавать.
+    DECOR_COOLDOWN_MINUTES = int(os.getenv("DECOR_COOLDOWN_MINUTES", "0"))
     SNOWBALLS_PER_DAY = int(os.getenv("SNOWBALLS_PER_DAY", "3"))
 
     REGISTRATION_START = _env_date("REGISTRATION_START", f"{datetime.date.today().year}-11-27")
