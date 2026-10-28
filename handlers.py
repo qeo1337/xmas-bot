@@ -60,15 +60,20 @@ async def show_menu(cb_or_msg, edit: bool):
 
 async def send_tree_image(bot, uid: int, ornaments: int):
     """Фото текущего звания ёлки — отдельным сообщением в личку."""
+    import logging
     import os
-    path = TIER_IMAGES[current_tree_tier(ornaments)]
+    # путь от корня проекта (где лежит handlers.py) — не зависит от cwd процесса
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        TIER_IMAGES[current_tree_tier(ornaments)])
     if not os.path.exists(path):
+        logging.warning("tree image not found: %s", path)
         return
     try:
         with open(path, "rb") as f:
             await bot.send_photo(uid, f, caption=tree_progress_line(ornaments))
     except Exception:
-        pass  # фото — приятность, не роняем основной сценарий
+        logging.exception("failed to send tree image")
+        # фото — приятность, не роняем основной сценарий
 
 
 # ---------------------------------------------------------------- старт / регистрация
