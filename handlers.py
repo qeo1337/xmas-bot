@@ -11,7 +11,9 @@ from config import Config, now_local
 from database import (get_user, is_whitelisted, whitelist_display_name, log_event, pool,
                      registration_state, register_user)
 from game import (fmt_delta, next_decor_at, snowball_left, throw_snowball,
-                  user_achievements, decorate, check_achievements)
+                  user_achievements, decorate, check_achievements,
+                  TIER_IMAGES, current_tree_tier)
+from views import tree_progress_line
 from views import (admin_participants_text, admin_rating_text, admin_stats_text,
                    menu_text, my_ranking_text, name_of, stats_text, esc)
 
@@ -52,6 +54,21 @@ async def show_menu(cb_or_msg, edit: bool):
             pass
     else:
         await message.answer(text, reply_markup=kb)
+
+
+# ---------------------------------------------------------------- картинка звания
+
+async def send_tree_image(bot, uid: int, ornaments: int):
+    """Фото текущего звания ёлки — отдельным сообщением в личку."""
+    import os
+    path = TIER_IMAGES[current_tree_tier(ornaments)]
+    if not os.path.exists(path):
+        return
+    try:
+        with open(path, "rb") as f:
+            await bot.send_photo(uid, f, caption=tree_progress_line(ornaments))
+    except Exception:
+        pass  # фото — приятность, не роняем основной сценарий
 
 
 # ---------------------------------------------------------------- старт / регистрация
@@ -103,6 +120,7 @@ async def cmd_start(message: Message):
         + (f"С {Config.EVENT_START.strftime('%d.%m')} начинается игра."
            if now.date() < Config.EVENT_START else "Игра уже идёт — вперёд!"))
     await show_menu(message, edit=False)
+    await send_tree_image(message.bot, uid, 0)
 
 
 # ---------------------------------------------------------------- украшение
@@ -144,6 +162,7 @@ async def cb_decor(cb: CallbackQuery):
     # результат — отдельным сообщением вниз, меню при этом обновляется (edit)
     await cb.message.answer("\n".join(lines))
     await show_menu(cb, edit=True)
+    await send_tree_image(cb.bot, uid, res["ornaments"])
 
 
 # ---------------------------------------------------------------- снежки

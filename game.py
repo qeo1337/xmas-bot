@@ -147,10 +147,67 @@ async def throw_snowball(from_id: int, to_id: int) -> dict:
 
 # ---------------------------------------------------------------- достижения
 
+# ---------------------------------------------------------------- звания ёлки
+# Шкала «званий ёлки» по числу шаров: порог = сколько шаров нужно для звания,
+# картинка — файл в статике (имена = коды ачивок).
+TREE_TIERS = [
+    # (code: (порог, название, картинка)); картинки лежат в static/
+    ("b_first", (1, "🌱 «Три иголки»", "static/b_first.png")),
+    ("b50", (50, "📈 «Всё идёт по плану»", "static/b50.png")),
+    ("b100", (100, "💫 «Почти как у бабушки»", "static/b100.png")),
+    ("b150", (150, "⭐ «Звезда района»", "static/b150.png")),
+    ("b250", (250, "🏙 «Городская ёлка»", "static/b250.png")),
+    ("b400", (400, "📰 «Местные в шоке»", "static/b400.png")),
+    ("b500", (500, "🗿 «Лесной босс»", "static/b500.png")),
+    ("b600", (600, "🛰 «Видно из космоса»", "static/b600.png")),
+    ("b700", (700, "⚠️ «Хвойная аномалия»", "static/b700.png")),
+    ("b825", (825, "☢️ «Хвойная угроза»", "static/b825.png")),
+]
+TIER_ORDER = [c for c, _ in TREE_TIERS]
+TIER_THRESHOLDS = {c: t[0] for c, t in TREE_TIERS}
+TIER_TITLES = {c: t[1] for c, t in TREE_TIERS}
+TIER_IMAGES = {c: t[2] for c, t in TREE_TIERS}
+
+# стартовое звание — у тех, кто ещё не повесил ни одного шара
+START_TIER = ("🌱 «Три иголки»", "static/b_first.png")
+
+
+def current_tree_tier(ornaments: int) -> str:
+    """Код текущего звания (высший достигнутый порог; пока нет шаров -> первое)."""
+    cur = None
+    for code in TIER_ORDER:
+        if ornaments >= TIER_THRESHOLDS[code]:
+            cur = code
+    return cur or TIER_ORDER[0]
+
+
+def tree_title(ornaments: int) -> str:
+    return TIER_TITLES[current_tree_tier(ornaments)]
+
+
+def next_tree_tier(ornaments: int):
+    """(код следующего звания, его порог) или None, если звание уже высшее."""
+    for code in TIER_ORDER:
+        if ornaments < TIER_THRESHOLDS[code]:
+            return code, TIER_THRESHOLDS[code]
+    return None
+
+
+def tree_progress_line(ornaments: int) -> str:
+    """«Текущее звание — сколько шаров до следующего»."""
+    if ornaments <= 0:
+        return "🎄 Стартовая ёлочка — повесь первый шар, чтобы начать наряжать!"
+    nxt = next_tree_tier(ornaments)
+    if nxt is None:
+        return f"🎄 {tree_title(ornaments)} — высшее звание достигнуто! 🏆"
+    nxt_code, nxt_thr = nxt
+    return (f"🎄 {tree_title(ornaments)} — до {TIER_TITLES[nxt_code]} "
+            f"нужно ещё {nxt_thr - ornaments} шар(а/ов)")
+
+
 ACH_DEFS = {
     # code: (заголовок, предикат от row users)
     "take_part": ("🎄 «Я в деле!» — участник ивента", lambda u: True),
-    "first_decor": ("🌱 «Три иголки» — первый шар", lambda u: u["decor_total"] >= 1),
     "decor_10": ("✨ 10 украшений", lambda u: u["decor_total"] >= 10),
     "decor_50": ("✨ 50 украшений", lambda u: u["decor_total"] >= 50),
     "streak_3": ("🔥 Серия 3 дня", lambda u: u["best_streak"] >= 3),
@@ -161,16 +218,10 @@ ACH_DEFS = {
     "first_snow": ("❄️ Первый снежок", lambda u: u["snowballs_sent"] >= 1),
     "snow_25": ("❄️ 25 отправленных снежков", lambda u: u["snowballs_sent"] >= 25),
     "recv_25": ("☃️ 25 полученных снежков", lambda u: u["snowballs_recv"] >= 25),
-    "b50": ("📈 «Всё идёт по плану» — 50 шаров", lambda u: u["ornaments"] >= 50),
-    "b100": ("💫 «Почти как у бабушки» — 100 шаров", lambda u: u["ornaments"] >= 100),
-    "b150": ("⭐ «Звезда района» — 150 шаров", lambda u: u["ornaments"] >= 150),
-    "b250": ("🏙 «Городская ёлка» — 250 шаров", lambda u: u["ornaments"] >= 250),
-    "b400": ("📰 «Местные в шоке» — 400 шаров", lambda u: u["ornaments"] >= 400),
-    "b500": ("🗿 «Лесной босс» — 500 шаров", lambda u: u["ornaments"] >= 500),
-    "b600": ("🛰 «Видно из космоса» — 600 шаров", lambda u: u["ornaments"] >= 600),
-    "b700": ("⚠️ «Хвойная аномалия» — 700 шаров", lambda u: u["ornaments"] >= 700),
-    "b825": ("☢️ «Хвойная угроза» — 825 шаров", lambda u: u["ornaments"] >= 825),
-    "b1000": ("🌌 «Ёлка галактического масштаба» — 1000 шаров", lambda u: u["ornaments"] >= 1000),
+    # звания ёлки — пороги/названия/картинки описаны в TREE_TIERS выше
+    **{c: (f"{t[1]} — {t[0]} шаров",
+           (lambda n: (lambda u: u["ornaments"] >= n))(t[0]))
+       for c, t in TREE_TIERS},
 }
 # коды ачивок с прозрачным порогом, для которых нельзя «нагнать» lp
 DISCRETION = {"take_part": "registration"}

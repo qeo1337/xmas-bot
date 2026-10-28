@@ -9,7 +9,8 @@ import html
 from config import Config, now_local
 from database import pool
 from game import (next_decor_at, fmt_delta, snowball_left,
-                  user_achievements, leaderboard, rank_of, ACH_DEFS)
+                  user_achievements, leaderboard, rank_of, ACH_DEFS,
+                  TIER_IMAGES, current_tree_tier, tree_progress_line)
 
 
 def esc(value: str | None) -> str:
@@ -68,18 +69,19 @@ async def menu_text(u, commands: dict[str, str] | None = None) -> str:
 
 async def stats_text(u) -> str:
     ach = await user_achievements(u["tg_id"])
-    return (
+    head = (
         f"👤 {name_of(u)}\n\n"
-        f"🎄 Шаров на ёлке: {u['ornaments']}\n"
+        f"🎄 {tree_progress_line(u['ornaments'])}\n"
         f"✨ Украшений всего: {u['decor_total']}\n"
         f"🔥 Текущая серия: {u['streak']} дн.\n"
         f"🏆 Лучшая серия: {u['best_streak']} дн.\n"
         f"❄️ Отправлено снежков: {u['snowballs_sent']}\n"
         f"☃️ Получено снежков: {u['snowballs_recv']}\n\n"
-        f"🏅 Достижения ({len(ach)}/{len(ACH_DEFS)}):\n"
-        + "\n".join(
-            f"✅ {esc(t)}" if t in ach else "❌ ***"
-            for t in [d[0] for d in ACH_DEFS.values()]))
+        f"🏅 Достижения ({len(ach)}/{len(ACH_DEFS)}):\n")
+    tail = "\n".join(
+        f"✅ {esc(t)}" if t in ach else "❌ ***"
+        for t in [d[0] for d in ACH_DEFS.values()])
+    return head + tail
 
 
 # ------------------------------------------------- анонимная обратная связь
