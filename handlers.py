@@ -70,8 +70,11 @@ async def send_tree_image(bot, uid: int, ornaments: int):
         return
     try:
         data = open(path, "rb").read()
-        await bot.send_photo(uid, BufferedInputFile(data, filename=os.path.basename(path)),
-                             caption=tree_progress_line(ornaments))
+        logging.info("tree image: uid=%s path=%s size=%d tier=%s",
+                     uid, path, len(data), current_tree_tier(ornaments))
+        msg = await bot.send_photo(uid, BufferedInputFile(data, filename=os.path.basename(path)),
+                                   caption=tree_progress_line(ornaments))
+        logging.info("tree image sent: msg_id=%s", msg.message_id if hasattr(msg, 'message_id') else '?')
     except Exception:
         logging.exception("failed to send tree image")
         # фото — приятность, не роняем основной сценарий
