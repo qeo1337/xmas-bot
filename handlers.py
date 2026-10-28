@@ -59,10 +59,9 @@ async def show_menu(cb_or_msg, edit: bool):
 # ---------------------------------------------------------------- картинка звания
 
 async def send_tree_image(bot, uid: int, ornaments: int):
-    """Фото текущего звания ёлки — отдельным сообщением в личку."""
+    """Фото текущего звания ёлки — отдельным сообщением в личку (без подписи)."""
     import logging
     import os
-    # путь от корня проекта (где лежит handlers.py) — не зависит от cwd процесса
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                         TIER_IMAGES[current_tree_tier(ornaments)])
     if not os.path.exists(path):
@@ -70,14 +69,11 @@ async def send_tree_image(bot, uid: int, ornaments: int):
         return
     try:
         data = open(path, "rb").read()
-        logging.info("tree image: uid=%s path=%s size=%d tier=%s",
-                     uid, path, len(data), current_tree_tier(ornaments))
-        msg = await bot.send_photo(uid, BufferedInputFile(data, filename=os.path.basename(path)),
-                                   caption=tree_progress_line(ornaments))
-        logging.info("tree image sent: msg_id=%s", msg.message_id if hasattr(msg, 'message_id') else '?')
+        msg = await bot.send_photo(uid, BufferedInputFile(data, filename=os.path.basename(path)))
+        logging.info("tree image sent: uid=%s tier=%s msg_id=%s",
+                     uid, current_tree_tier(ornaments), msg.message_id if hasattr(msg, 'message_id') else '?')
     except Exception:
         logging.exception("failed to send tree image")
-        # фото — приятность, не роняем основной сценарий
 
 
 # ---------------------------------------------------------------- старт / регистрация
@@ -377,6 +373,7 @@ async def cmd_admin(message: Message):
         f"/admin_rating — топ по номинациям\n"
         f"/admin_add username — добавить в whitelist\n"
         f"/admin_remove username — убрать из whitelist\n"
+        f"/admin_orbs username N — начислить/убрать шары (N — число, можно отрицательное)\n"
         f"/admin_register telegram_id Имя — принудительная регистрация\n"
         f"/admin_block telegram_id — заблокировать\n"
         f"/admin_unblock telegram_id — разблокировать\n"
@@ -485,6 +482,36 @@ async def cmd_admin_unblock(message: Message, command: CommandObject):
         await conn.execute("UPDATE users SET blocked = FALSE WHERE tg_id = $1",
                            int(command.args.strip()))
     await message.answer("✅ Участник разблокирован.")
+
+
+@router.message(Command("admin_orbs"))
+async def cmd_admin_orbs(message: Message, command: CommandObject):
+    """Начислить/убрать шары: /admin_orbs username N (N может быть отрицательным)."""
+    if not is_admin(message.from_user.id):
+        return
+    if not command.args:
+        await message.answer("Использование: /admin_orbs username N (N — число шаров, можно отрицательное)")
+        return
+    parts = command.args.split(maxsplit=1)
+    if len(parts) != 2 or not parts[1].lstrip("-").isdigit():
+        await message.answer("Использование: /admin_orbs username N (N — число шаров, можно отрицательное)")
+        return
+    uname = parts[0].strip().lstrip("@").lower()
+    delta = int(parts[1])
+    async with pool().acquire() as conn:
+        u = await conn.fetchrow(
+            "SELECT tg_id, username, ornaments FROM users WHERE LOWER(username) = $1", uname)
+        if not u:
+            await message.answer(f"⛔ Участник @{uname} не найден.")
+            return
+        new_orbs = u["ornaments"] + delta
+        if new_orbs < 0:
+            await message.answer(f"⛔ Нельзя убрать больше шаров, чем у участника (сейчас {u['ornaments']}).")
+            return
+        await conn.execute(
+            "UPDATE users SET ornaments = $2 WHERE tg_id = $1", u["tg_id"], new_orbs)
+        await log_event(message.from_user.id, uname, "admin_orbs", f"{delta:+d} -> {new_orbs}")
+    await message.answer(f"✅ @{uname}: {u['ornaments']} {delta:+d} → {new_orbs} шаров.")
 
 
 @router.message(Command("admin_log"))
