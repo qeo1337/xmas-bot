@@ -60,6 +60,7 @@ async def menu_text(u, commands: dict[str, str] | None = None) -> str:
     return (
         (head + "\n" if head else "") +
         f"🎄 {name_of(u)}, на твоей ёлке — {u['ornaments']} шаров\n"
+        f"{tree_progress_line(u['ornaments'])}\n"
         f"{_decor_line(u, now)}\n"
         f"❄️ Снежков сегодня: {sb} | Отправлено всего: {u['snowballs_sent']}\n"
         f"☃️ Получено снежков: {u['snowballs_recv']}\n"
