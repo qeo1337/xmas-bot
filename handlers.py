@@ -92,8 +92,10 @@ async def cmd_start(message: Message):
     u = await get_user(uid)
 
     if u and not u["blocked"]:
-        await show_menu(message, edit=False)
+        # Фото с подписью (звание + прогресс)
         await send_tree_image(message.bot, uid, u["ornaments"])
+        # Меню с кнопками
+        await show_menu(message, edit=False)
         return
 
     uname = (message.from_user.username or "").lower()
@@ -129,8 +131,10 @@ async def cmd_start(message: Message):
         "🏅 Достижение получено: 🎄 «Я в деле!»\n"
         + (f"С {Config.EVENT_START.strftime('%d.%m')} начинается игра."
            if now.date() < Config.EVENT_START else "Игра уже идёт — вперёд!"))
-    await show_menu(message, edit=False)
+    # Фото с подписью
     await send_tree_image(message.bot, uid, 0)
+    # Меню с кнопками
+    await show_menu(message, edit=False)
 
 
 # ---------------------------------------------------------------- украшение
@@ -172,7 +176,12 @@ async def cb_decor(cb: CallbackQuery):
     # результат — отдельным сообщением вниз, меню при этом обновляется (edit)
     await cb.message.answer("\n".join(lines))
     await show_menu(cb, edit=True)
-    # Фото звания не отправляем при каждом украшении — только в /start (личном кабинете)
+    
+    # Если пересёк порог звания — отправляем новое фото автоматически
+    old_tier = current_tree_tier(before["ornaments"])
+    new_tier = current_tree_tier(res["ornaments"])
+    if old_tier != new_tier:
+        await send_tree_image(cb.bot, uid, res["ornaments"])
 
 
 # ---------------------------------------------------------------- снежки
