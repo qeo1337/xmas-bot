@@ -69,8 +69,7 @@ async def send_tree_image(bot, uid: int, ornaments: int):
         logging.warning("tree image not found: %s", path)
         return
     try:
-        with open(path, "rb") as f:
-            await bot.send_photo(uid, f, caption=tree_progress_line(ornaments))
+        await bot.send_photo(uid, path, caption=tree_progress_line(ornaments))
     except Exception:
         logging.exception("failed to send tree image")
         # фото — приятность, не роняем основной сценарий
