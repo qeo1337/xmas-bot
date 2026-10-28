@@ -5,7 +5,7 @@ import datetime
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
-                           Message)
+                           InputFile, Message)
 
 from config import Config, now_local
 from database import (get_user, is_whitelisted, whitelist_display_name, log_event, pool,
@@ -69,7 +69,9 @@ async def send_tree_image(bot, uid: int, ornaments: int):
         logging.warning("tree image not found: %s", path)
         return
     try:
-        await bot.send_photo(uid, path, caption=tree_progress_line(ornaments))
+        with open(path, "rb") as f:
+            await bot.send_photo(uid, InputFile(f, filename=os.path.basename(path)),
+                                 caption=tree_progress_line(ornaments))
     except Exception:
         logging.exception("failed to send tree image")
         # фото — приятность, не роняем основной сценарий
