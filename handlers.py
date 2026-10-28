@@ -93,6 +93,7 @@ async def cmd_start(message: Message):
 
     if u and not u["blocked"]:
         await show_menu(message, edit=False)
+        await send_tree_image(message.bot, uid, u["ornaments"])
         return
 
     uname = (message.from_user.username or "").lower()
@@ -171,7 +172,7 @@ async def cb_decor(cb: CallbackQuery):
     # результат — отдельным сообщением вниз, меню при этом обновляется (edit)
     await cb.message.answer("\n".join(lines))
     await show_menu(cb, edit=True)
-    await send_tree_image(cb.bot, uid, res["ornaments"])
+    # Фото звания не отправляем при каждом украшении — только в /start (личном кабинете)
 
 
 # ---------------------------------------------------------------- снежки

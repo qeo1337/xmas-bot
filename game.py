@@ -152,16 +152,16 @@ async def throw_snowball(from_id: int, to_id: int) -> dict:
 # картинка — файл в статике (имена = коды ачивок).
 TREE_TIERS = [
     # (code: (порог, название, картинка)); картинки лежат в static/
-    ("b_first", (1, "🌱 «Три иголки»", "static/b_first.png")),
-    ("b50", (50, "📈 «Всё идёт по плану»", "static/b50.png")),
-    ("b100", (100, "💫 «Почти как у бабушки»", "static/b100.png")),
-    ("b150", (150, "⭐ «Звезда района»", "static/b150.png")),
-    ("b250", (250, "🏙 «Городская ёлка»", "static/b250.png")),
-    ("b400", (400, "📰 «Местные в шоке»", "static/b400.png")),
-    ("b500", (500, "🗿 «Лесной босс»", "static/b500.png")),
-    ("b600", (600, "🛰 «Видно из космоса»", "static/b600.png")),
-    ("b750", (750, "☢️ «Хвойная угроза»", "static/b750.png")),
-    ("b1000", (1000, "🌌 «Ёлка галактического масштаба»", "static/b1000.png")),
+    ("b_first", (1, "🌱 «Три иголки»", "static/b_first.webp")),
+    ("b50", (50, "📈 «Всё идёт по плану»", "static/b50.webp")),
+    ("b100", (100, "💫 «Почти как у бабушки»", "static/b100.webp")),
+    ("b150", (150, "⭐ «Звезда района»", "static/b150.webp")),
+    ("b250", (250, "🏙 «Городская ёлка»", "static/b250.webp")),
+    ("b400", (400, "📰 «Местные в шоке»", "static/b400.webp")),
+    ("b500", (500, "🗿 «Лесной босс»", "static/b500.webp")),
+    ("b600", (600, "🛰 «Видно из космоса»", "static/b600.webp")),
+    ("b750", (750, "☢️ «Хвойная угроза»", "static/b750.webp")),
+    ("b1000", (1000, "🌌 «Ёлка галактического масштаба»", "static/b1000.webp")),
 ]
 TIER_ORDER = [c for c, _ in TREE_TIERS]
 TIER_THRESHOLDS = {c: t[0] for c, t in TREE_TIERS}
@@ -169,7 +169,7 @@ TIER_TITLES = {c: t[1] for c, t in TREE_TIERS}
 TIER_IMAGES = {c: t[2] for c, t in TREE_TIERS}
 
 # стартовое звание — у тех, кто ещё не повесил ни одного шара
-START_TIER = ("🌱 «Три иголки»", "static/b_first.png")
+START_TIER = ("🌱 «Три иголки»", "static/b_first.webp")
 
 
 def current_tree_tier(ornaments: int) -> str:
