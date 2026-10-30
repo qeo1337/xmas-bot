@@ -1,6 +1,9 @@
 """Хендлеры TG-бота: меню, inline-кнопки, регистрация, анонимный рейтинг, админ-команды."""
 
 import datetime
+import os
+import random
+import secrets
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject, CommandStart
@@ -21,59 +24,170 @@ router = Router()
 
 TG_COMMANDS = {"decor": "/decor", "snow": "/snow имя", "rank": "/top", "me": "/me"}
 
+# ---------------------------------------------------------------- финал ивента
 
-# ---------------------------------------------------------------- helpers
+FINAL_WINNERS_PER_KIND = 3  # сколько мест в каждой номинации объявляем победителями
 
-def menu_kb(u, can_decor: bool) -> InlineKeyboardMarkup:
-    rows = [
-        [InlineKeyboardButton(
-            text="✨ Повесить шар" if can_decor else "✨ Пока нельзя — кулдаун",
-            callback_data="decor")],
-        [InlineKeyboardButton(text="❄️ Кинуть снежок", callback_data="snow_start")],
-        [InlineKeyboardButton(text="🏆 Моё место", callback_data="ranking"),
-         InlineKeyboardButton(text="👤 Статистика", callback_data="stats")],
-    ]
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+# Пароль на /delete_db — через переменную окружения DB_RESET_PASSWORD (не в коде!)
+DB_RESET_PASSWORD = os.getenv("DB_RESET_PASSWORD", "")
 
 
-async def show_menu(cb_or_msg, edit: bool):
-    message = cb_or_msg.message if isinstance(cb_or_msg, CallbackQuery) else cb_or_msg
-    uid = cb_or_msg.from_user.id
-    u = await get_user(uid)
-    if not u or u["blocked"]:
+async def _final_text(bot, uid: int) -> str:
+    """Итоги ивента: если uid среди победителей — поздравление, иначе — благодарность."""
+    from game import leaderboard
+    wins = []
+    for title, kind in [
+        ("🎄 Самая нарядная ёлка", "ornaments"),
+        ("🎯 Главный снайпер", "snipers"),
+        ("🌟 Декоратор (лучшая серия)", "decorators"),
+        ("☃️ Снеговик", "snowmen"),
+    ]:
+        rows = await leaderboard(kind, FINAL_WINNERS_PER_KIND)
+        for i, r in enumerate(rows, 1):
+            if r["tg_id"] == uid:
+                wins.append((title, i, r["value"]))
+    if wins:
+        lines = ["🏆 ПОЗДРАВЛЯЕМ! Ты в числе победителей новогоднего ивента!\n"]
+        for title, place, value in wins:
+            medal = {1: "🥇", 2: "🥈", 3: "🥉"}[place]
+            lines.append(f"{medal} {title} — {place} место")
+        lines.append("\nСпасибо, что участвовал — это было здорово! 🎄")
+        return "\n".join(lines)
+    return ("🎄 Новогодний ивент завершён!\n\n"
+            "Спасибо за участие — ёлки, снежки, серии. "
+            "Результаты объявим, а пока — отдыхай и готовься к следующему ивенту! 🎅")
+
+
+@router.message(Command("admin_final_broadcast"))
+async def cmd_admin_final_broadcast(message: Message):
+    """Рассылка итогов: победителям — поздравление, остальным — спасибо за участие."""
+    if not is_admin(message.from_user.id):
         return
-    can = True
-    if u["last_decor"]:
-        can = now_local() >= next_decor_at(u["last_decor"])
-    text = await menu_text(u, TG_COMMANDS)
-    kb = menu_kb(u, can)
-    if edit:
+    from database import pool
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT tg_id, display_name, username FROM users WHERE blocked = FALSE")
+    if not rows:
+        await message.answer("Участников нет — рассылать нечего.")
+        return
+    ok, fail = 0, 0
+    for r in rows:
         try:
-            await message.edit_text(text, reply_markup=kb)
+            text = await _final_text(message.bot, r["tg_id"])
+            await message.bot.send_message(r["tg_id"], text)
+            ok += 1
         except Exception:
-            pass
-    else:
-        await message.answer(text, reply_markup=kb)
+            fail += 1
+    await message.answer(
+        f"📤 Рассылка итогов завершена: {ok} получено, {fail} ошибок "
+        f"(участник не открыл бота).")
 
 
-# ---------------------------------------------------------------- картинка звания
+# ---------------------------------------------------------------- /delete_db
 
-async def send_tree_image(bot, uid: int, ornaments: int):
-    """Фото текущего звания ёлки — отдельным сообщением в личку (без подписи)."""
-    import logging
-    import os
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        TIER_IMAGES[current_tree_tier(ornaments)])
-    if not os.path.exists(path):
-        logging.warning("tree image not found: %s", path)
+# Состояние: uid -> (stage, expected, expires)
+# stage: "password" | "captcha"; expected: пароль или ответ капчи
+_reset_state: dict[int, tuple[str, str, datetime.datetime]] = {}
+
+
+@router.message(Command("delete_db"))
+async def cmd_delete_db(message: Message):
+    """Сброс БД: пароль + капча + бэкап в чат. Только админ."""
+    if not is_admin(message.from_user.id):
         return
-    try:
-        data = open(path, "rb").read()
-        msg = await bot.send_photo(uid, BufferedInputFile(data, filename=os.path.basename(path)))
-        logging.info("tree image sent: uid=%s tier=%s msg_id=%s",
-                     uid, current_tree_tier(ornaments), msg.message_id if hasattr(msg, 'message_id') else '?')
-    except Exception:
-        logging.exception("failed to send tree image")
+    if not DB_RESET_PASSWORD:
+        await message.answer("⛔ DB_RESET_PASSWORD не задан в переменных окружения.")
+        return
+    if message.from_user.id in _reset_state:
+        await message.answer("⏳ Уже идёт подтверждение. Отмена: /cancel")
+        return
+    _reset_state[message.from_user.id] = ("password", "", datetime.datetime.now() + datetime.timedelta(minutes=2))
+    await message.answer(
+        "🗑 СБРОС БД — ДАННЫЕ БУДУТ УДАЛЕНЫ!\n\n"
+        "Шаг 1/2: пришли пароль (он в переменных окружения Амверы).\n"
+        "Отмена: /cancel")
+
+
+@router.message(Command("cancel"))
+async def cmd_reset_cancel(message: Message):
+    uid = message.from_user.id
+    if uid in _reset_state:
+        del _reset_state[uid]
+        await message.answer("❌ Сброс отменён.")
+
+
+# Ловим текстовый ответ на пароль/капчу — только если админ в состоянии сброса
+@router.message(F.text & ~F.text.startswith("/"))
+async def cmd_reset_answer(message: Message):
+    uid = message.from_user.id
+    if uid not in _reset_state or not is_admin(uid):
+        return  # не наш случай — пропускаем дальше
+    stage, expected, expires = _reset_state[uid]
+    if datetime.datetime.now() > expires:
+        del _reset_state[uid]
+        await message.answer("⏰ Подтверждение истекло (2 мин). Начните заново: /delete_db")
+        return
+    text = (message.text or "").strip()
+    if stage == "password":
+        if not secrets.compare_digest(text, DB_RESET_PASSWORD):
+            del _reset_state[uid]
+            await message.answer("❌ Неверный пароль. Попробуйте снова: /delete_db")
+            return
+        a, b = random.randint(10, 99), random.randint(10, 99)
+        _reset_state[uid] = ("captcha", str(a + b), datetime.datetime.now() + datetime.timedelta(minutes=2))
+        await message.answer(f"Шаг 2/2: капча. Сколько будет {a} + {b}?\nОтмена: /cancel")
+        return
+    # captcha
+    if text != expected:
+        del _reset_state[uid]
+        await message.answer("❌ Неверный ответ капчи. Попробуйте снова: /delete_db")
+        return
+    del _reset_state[uid]
+    await _do_reset_db(message)
+
+
+async def _do_reset_db(message: Message):
+    """Бэкап в чат + очистка таблиц (в транзакции). Whitelist сохраняется."""
+    from database import pool, log_event
+    async with pool().acquire() as conn:
+        users = await conn.fetch(
+            """SELECT tg_id, username, display_name, registered_at, ornaments,
+                      best_streak, snowballs_sent, snowballs_recv, blocked
+               FROM users""")
+        ach = await conn.fetch("SELECT tg_id, code FROM achievements")
+        wl = await conn.fetch("SELECT username, display_name FROM whitelist")
+    lines = ["📦 БЭКАП ПЕРЕД СБРОСОМ БД",
+             f"Время: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+             f"Пользователей: {len(users)} | Достижений: {len(ach)}"]
+    if wl:
+        lines.append("\n-- whitelist (не сбрасывается) --")
+        for r in wl:
+            lines.append(f"{r['username']}|{r['display_name'] or ''}")
+    if users:
+        lines.append("\n-- users --")
+        for r in users:
+            lines.append(
+                f"{r['tg_id']}|{r['username'] or ''}|{r['display_name'] or ''}|"
+                f"{r['registered_at'].strftime('%Y-%m-%d')}|"
+                f"ornaments={r['ornaments']} best_streak={r['best_streak']}|"
+                f"snow={r['snowballs_sent']}/{r['snowballs_recv']}|"
+                f"blocked={int(r['blocked'])}")
+    if ach:
+        lines.append("\n-- achievements (tg_id:code) --")
+        for r in ach:
+            lines.append(f"{r['tg_id']}:{r['code']}")
+    blob = "\n".join(lines)
+    for i in range(0, len(blob), 4000):
+        await message.answer(f"```{blob[i:i+4000]}```")
+    async with pool().acquire() as conn:
+        async with conn.transaction():
+            await conn.execute("DELETE FROM event_log")
+            await conn.execute("DELETE FROM achievements")
+            await conn.execute("DELETE FROM users")
+    await log_event(message.from_user.id, "", "delete_db", "full reset (backup in chat)")
+    await message.answer(
+        "✅ БД сброшена. Бэкап выше — сохрани его, если захочешь восстановить.\n"
+        "Whitelist не трогала (это список участников, а не прогресс).")
 
 
 # ---------------------------------------------------------------- старт / регистрация
@@ -378,7 +492,9 @@ async def cmd_admin(message: Message):
         f"/admin_block telegram_id — заблокировать\n"
         f"/admin_unblock telegram_id — разблокировать\n"
         f"/admin_log N — последние N событий\n"
-        f"/admin_final — итоги ивента (полный reveal)")
+        f"/admin_final — итоги ивента (только тебе)\n"
+        f"/admin_final_broadcast — рассылка итогов всем (победителям — поздравление, остальным — спасибо)\n"
+        f"/delete_db — сброс БД (пароль + капча + бэкап в чат)")
 
 
 @router.message(Command("admin_stats"))
