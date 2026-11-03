@@ -190,6 +190,55 @@ async def _do_reset_db(message: Message):
         "Whitelist не трогала (это список участников, а не прогресс).")
 
 
+# ---------------------------------------------------------------- меню / фото
+
+from views import tree_progress_line  # noqa: F401 (используется в подписях)
+
+MENU_BUTTONS = [
+    [("✨ Повесить шар", "decor"), ("❄️ Кинуть снежок", "snow_start")],
+    [("🏆 Моё место", "ranking"), ("👤 Статистика", "stats")],
+]
+
+MENU_KEYBOARD = InlineKeyboardMarkup(inline_keyboard=[
+    [InlineKeyboardButton(text=t, callback_data=cb) for t, cb in row]
+    for row in MENU_BUTTONS])
+
+
+def _tree_caption(ornaments: int) -> str:
+    return tree_progress_line(ornaments)
+
+
+async def send_tree_image(bot, uid: int, ornaments: int) -> None:
+    """Фото текущего звания ёлки. Ошибки не рвут основной сценарий."""
+    code = current_tree_tier(ornaments)
+    img = TIER_IMAGES.get(code) or TIER_IMAGES[TIER_ORDER[0]]
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), img)
+    try:
+        with open(path, "rb") as f:
+            data = f.read()
+        await bot.send_photo(uid, BufferedInputFile(data, filename=os.path.basename(path)))
+    except Exception:
+        import logging
+        logging.getLogger("root").exception("failed to send tree image (path=%s)", path)
+
+
+async def show_menu(target, edit: bool = True) -> None:
+    """Меню с кнопками. target: Message (new) или CallbackQuery (edit на месте)."""
+    from views import menu_text, esc
+    uid = target.from_user.id
+    u = await get_user(uid)
+    if not u:
+        return
+    text = await menu_text(u)
+    if edit and target.__class__.__name__ == "CallbackQuery":
+        try:
+            await target.message.edit_text(text, reply_markup=MENU_KEYBOARD)
+        except Exception:
+            await target.message.answer(text, reply_markup=MENU_KEYBOARD)
+    else:
+        await target.answer(text, reply_markup=MENU_KEYBOARD)
+
+
 # ---------------------------------------------------------------- старт / регистрация
 
 @router.message(CommandStart())
