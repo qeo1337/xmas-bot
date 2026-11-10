@@ -90,30 +90,30 @@ async def stats_text(u) -> str:
 # и отставание от лидера. Полные списки — только админам.
 
 RATING_TITLES = [
-    ("🎄 Самая нарядная ёлка", "ornaments", "шаров"),
-    ("🎯 Главные снайперы", "snipers", "снежков"),
-    ("🌟 Декоратор (лучшая серия)", "decorators", "дн."),
-    ("☃️ Снеговик", "snowmen", "снежков"),
+    ("🎄 Самая нарядная ёлка", "У кого больше всего шаров на ёлке", "ornaments", "шаров"),
+    ("🎯 Главный снайпер", "Кто бросил больше всего снежков", "snipers", "снежков"),
+    ("🌟 Декоратор", "Лучшая серия дней подряд с украшениями", "decorators", "дн."),
+    ("☃️ Снеговик", "Кто получил больше всего снежков", "snowmen", "снежков"),
 ]
 
 
 async def my_ranking_text(uid: int) -> str:
-    text = "🏆 Твоё место в номинациях\n"
-    for title, kind, unit in RATING_TITLES:
+    text = "🏆 Твои номинации\n"
+    for title, desc, kind, unit in RATING_TITLES:
         rank, total, lead = await rank_of(uid, kind)
         if not total:
-            text += f"\n{title}: пока нет участников\n"
+            text += f"\n{title}\n{desc}: пока нет участников\n"
             continue
         if rank == 0:
-            text += f"\n{title}: ты не участвуешь\n"
+            text += f"\n{title}\n{desc}: ты не участвуешь\n"
             continue
         if rank == 1:
-            text += f"\n{title}: {rank} место из {total} — ты лидер 🥇\n"
+            text += f"\n{title}\n{desc}: {rank} место из {total} — ты лидер 🥇\n"
         else:
-            line = f"\n{title}: {rank} место из {total}"
+            line = f"{desc}: {rank} место из {total}"
             if lead > 0:
                 line += f" (до лидера {lead} {unit})"
-            text += line + "\n"
+            text += f"\n{title}\n{line}\n"
     text += "\nПолный рейтинг скрыт до финала ивента 🎁"
     return text
 

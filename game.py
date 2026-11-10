@@ -21,6 +21,7 @@ def next_decor_at(last: datetime.datetime) -> datetime.datetime:
 
 
 def fmt_delta(seconds: int) -> str:
+    """Относительное время: «3 ч 5 мин», «7 мин». Для коротких уведомлений."""
     m = seconds // 60
     h, m = divmod(m, 60)
     if h:
@@ -28,8 +29,10 @@ def fmt_delta(seconds: int) -> str:
     return f"{m} мин"
 
 
-def in_day_window(now) -> bool:
-    return Config.DAY_WINDOW_START <= now.hour <= Config.DAY_WINDOW_END
+def fmt_next_time(dt) -> str:
+    """Абсолютное время МСК: «15:42 (МСК)» — для меню и кнопок (честно до секунды)."""
+    tzname = "МСК" if Config.TZ.key == "Europe/Moscow" else Config.TZ.key
+    return dt.astimezone(Config.TZ).strftime("%H:%M") + f" ({tzname})"
 
 
 def _streak_update(u, now, day_active: bool):
@@ -45,9 +48,9 @@ def _streak_update(u, now, day_active: bool):
 
 
 async def decorate(uid: int) -> dict:
-    """Вешает шар на ёлку. Возвращает dict с результатом или ошибкой."""
+    """Вешает шар на ёлку. Возвращает dict с результатом или ошибкой.
+    Любое время суток засчитывается: шары + бонус серии (без дневного окна)."""
     now = now_local()
-    day_active = in_day_window(now)
     async with pool().acquire() as conn:
         u = await conn.fetchrow("SELECT * FROM users WHERE tg_id = $1 FOR UPDATE", uid)
         if not u:
@@ -58,8 +61,8 @@ async def decorate(uid: int) -> dict:
             wait = int((next_decor_at(u["last_decor"]) - now).total_seconds())
             return {"ok": False, "error": "cooldown", "wait": wait}
 
-        new_streak, new_last_day = _streak_update(u, now, day_active)
-        bonus = Config.streak_bonus(new_streak) if day_active else 0
+        new_streak, new_last_day = _streak_update(u, now, True)
+        bonus = Config.streak_bonus(new_streak)
         balls = BASE_GROWTH + bonus
 
         await conn.execute(
@@ -78,7 +81,6 @@ async def decorate(uid: int) -> dict:
             "streak": new_streak, "best": max(u["best_streak"], new_streak),
             "ornaments": u["ornaments"] + balls,
             "total": u["decor_total"] + 1,
-            "in_day_window": day_active,
         }
 
 

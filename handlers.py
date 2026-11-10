@@ -13,7 +13,7 @@ from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButto
 from config import Config, now_local
 from database import (get_user, is_whitelisted, whitelist_display_name, log_event, pool,
                      registration_state, register_user)
-from game import (fmt_delta, next_decor_at, snowball_left, throw_snowball,
+from game import (fmt_delta, fmt_next_time, next_decor_at, snowball_left, throw_snowball,
                   user_achievements, decorate, check_achievements,
                   TIER_IMAGES, current_tree_tier)
 from views import tree_progress_line
@@ -196,7 +196,7 @@ from views import tree_progress_line  # noqa: F401 (используется в 
 
 MENU_BUTTONS = [
     [("✨ Повесить шар", "decor"), ("❄️ Кинуть снежок", "snow_start")],
-    [("🏆 Моё место", "ranking"), ("👤 Статистика", "stats")],
+    [("🏆 Мои номинации", "ranking"), ("👤 Статистика", "stats")],
 ]
 
 MENU_KEYBOARD = InlineKeyboardMarkup(inline_keyboard=[
@@ -314,15 +314,14 @@ async def cb_decor(cb: CallbackQuery):
     res = await decorate(uid)
     if not res["ok"]:
         if res["error"] == "cooldown":
-            await cb.answer(f"✨ Следующий шар через {fmt_delta(res['wait'])}", show_alert=True)
+            nxt = now_local() + datetime.timedelta(seconds=res["wait"])
+            await cb.answer(f"✨ Следующий шар — {fmt_next_time(nxt)}", show_alert=True)
         else:
             await cb.answer("⛔ Недоступно", show_alert=True)
         return
 
     lines = [f"✨ На ёлке стало на {res['balls']} шар(а/ов) больше."
              + (f" (бонус серии: +{res['bonus']})" if res["bonus"] else "")]
-    if not res["in_day_window"]:
-        lines.append("🌙 Ночное украшение: шары вешаются, но серия не растёт.")
     lines.append(f"🎄 Всего шаров: {res['ornaments']}")
     lines.append(f"🔥 Серия: {res['streak']} дн. | 🏆 Лучшая: {res['best']} дн.")
 
@@ -353,20 +352,19 @@ async def cb_snow_start(cb: CallbackQuery):
         return
     left = await snowball_left(uid)
     if left <= 0:
-        await cb.answer("❄️ Сегодня снежков больше нет. Новые появятся завтра.", show_alert=True)
+        await cb.answer("❄️ Снежков больше нет. Новые — завтра в 00:00 (МСК).", show_alert=True)
         return
-    async with pool().acquire() as conn:
-        rows = await conn.fetch(
-            """SELECT tg_id, display_name, username FROM users
-               WHERE tg_id != $1 AND blocked = FALSE
-               ORDER BY display_name NULLS LAST LIMIT 40""", uid)
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}")[:40],
-            callback_data=f"snow:{r['tg_id']}")]
-        for r in rows])
-    await cb.message.answer(f"❄️ В кого кидаем снежок? (у вас их {left})", reply_markup=kb)
+    kb = await _snow_picker_kb(uid)
+    await cb.message.answer(f"❄️ В кого кидаем снежок? (у вас их {left})\nИли найди по имени: 🔍 Поиск по имени",
+                            reply_markup=kb)
     await cb.answer()
+
+
+@router.callback_query(F.data == "snow_search")
+async def cb_snow_search(cb: CallbackQuery):
+    """🔍 Поиск: пользователь присылает имя — показываем совпадения кнопками."""
+    await cb.answer("Пришли имя (или начало имени) — например: «Марк»", show_alert=True)
+    _snow_search_pending.add(cb.from_user.id)
 
 
 @router.callback_query(F.data.startswith("snow:"))
@@ -375,7 +373,7 @@ async def cb_snow_throw(cb: CallbackQuery):
     target_id = int(cb.data.split(":")[1])
     res = await throw_snowball(uid, target_id)
     if not res["ok"]:
-        msg = {"no_snowballs": "❄️ Снежки закончились до завтра.",
+        msg = {"no_snowballs": "❄️ Снежков больше нет. Новые — завтра в 00:00 (МСК).",
                "no_target": "⛔ Участник не найден.",
                "target_blocked": "⛔ Участник заблокирован."}.get(res["error"], "⛔ Ошибка")
         await cb.answer(msg, show_alert=True)
@@ -426,6 +424,56 @@ async def cb_menu(cb: CallbackQuery):
     await cb.answer()
 
 
+# Поиск по имени (для снежков): пользователь присылает имя, показываем совпадения
+_snow_search_pending: set[int] = set()
+
+
+@router.message(F.text & ~F.text.startswith("/"))
+async def cb_snow_search_text(message: Message):
+    uid = message.from_user.id
+    if not _snow_search_pending.pop(uid, None):
+        return
+    query = (message.text or "").strip().lower()
+    if len(query) < 2:
+        await message.answer("❄️ Слишком коротко — минимум 2 буквы. Ещё раз:")
+        return
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT tg_id, display_name, username FROM users
+               WHERE tg_id != $1 AND blocked = FALSE
+                 AND (LOWER(display_name) LIKE $2 OR LOWER(username) LIKE $2)
+               ORDER BY display_name NULLS LAST LIMIT 10""",
+            uid, f"{query}%")
+    if not rows:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")]])
+        await message.answer(f"⛔ Никого не нашлось по «{query[:30]}»", reply_markup=kb)
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}")[:40],
+            callback_data=f"snow:{r['tg_id']}")]
+        for r in rows])
+    kb.inline_keyboard.append([InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")])
+    await message.answer(f"❄️ Найдено по «{query[:30]}»:", reply_markup=kb)
+
+
+async def _snow_picker_kb(uid: int) -> InlineKeyboardMarkup:
+    """Список целей снежка: алфавит + кнопка «🔍 Поиск по имени»."""
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT tg_id, display_name, username FROM users
+               WHERE tg_id != $1 AND blocked = FALSE
+               ORDER BY display_name NULLS LAST LIMIT 40""", uid)
+    kb_rows = [
+        [InlineKeyboardButton(
+            text=esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}")[:40],
+            callback_data=f"snow:{r['tg_id']}")]
+        for r in rows]
+    kb_rows.append([InlineKeyboardButton(text="🔍 Поиск по имени", callback_data="snow_search")])
+    return InlineKeyboardMarkup(inline_keyboard=kb_rows)
+
+
 # текстовые дубли кнопок (удобно с телефона из любого чата)
 @router.message(Command("decor"))
 async def cmd_decor(message: Message):
@@ -443,13 +491,12 @@ async def cmd_decor(message: Message):
     res = await decorate(uid)
     if not res["ok"]:
         if res["error"] == "cooldown":
-            await message.answer(f"✨ Следующий шар через {fmt_delta(res['wait'])}")
+            nxt = now_local() + datetime.timedelta(seconds=res["wait"])
+            await message.answer(f"✨ Следующий шар — {fmt_next_time(nxt)}")
         else:
             await message.answer("⛔ Недоступно")
         return
     lines = [f"✨ +{res['balls']} шар(а/ов)." + (f" Бонус серии: +{res['bonus']}." if res["bonus"] else "")]
-    if not res["in_day_window"]:
-        lines.append("🌙 Ночное украшение: серия не растёт.")
     lines.append(f"🎄 Всего шаров: {res['ornaments']}")
     lines.append(f"🔥 Серия: {res['streak']} дн. | 🏆 Лучшая: {res['best']} дн.")
     new_ach = await check_achievements(uid)
@@ -483,7 +530,7 @@ async def cmd_snow(message: Message, command: CommandObject):
         return
     res = await throw_snowball(uid, t["tg_id"])
     if not res["ok"]:
-        await message.answer({"no_snowballs": "❄️ Снежки закончились до завтра.",
+        await message.answer({"no_snowballs": "❄️ Снежков больше нет. Новые — завтра в 00:00 (МСК).",
                               "no_target": "⛔ Участник не найден."}.get(res["error"], "⛔ Ошибка"))
         return
     me = await get_user(uid)
