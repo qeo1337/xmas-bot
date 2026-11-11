@@ -207,7 +207,7 @@ from views import tree_progress_line  # noqa: F401 (используется в 
 MENU_BUTTONS = [
     [("✨ Повесить шар", "decor"), ("❄️ Кинуть снежок", "snow_start")],
     [("🏆 Мои номинации", "ranking"), ("👤 Статистика", "stats")],
-    [("⏰ Напоминание", "rem_start")],
+    [("🎄 Моя ёлка", "tree_view"), ("⏰ Напоминание", "rem:0:start")],
 ]
 
 MENU_KEYBOARD = InlineKeyboardMarkup(inline_keyboard=[
@@ -316,9 +316,9 @@ _reminder_hours_pending: dict[int, tuple[int, list[int]]] = {}
 
 @router.callback_query(F.data.startswith("rem:"))
 async def cb_reminder_route(cb: CallbackQuery):
-    if cb.data == "rem_start":
-        return await cb_reminder_start(cb)
     parts = cb.data.split(":")
+    if len(parts) >= 3 and parts[2] == "start":
+        return await cb_reminder_start(cb)
     if len(parts) >= 2 and parts[1].isdigit():
         return await cb_reminder_set(cb)
 
@@ -390,7 +390,8 @@ async def _refresh_all(bot) -> None:
                  InlineKeyboardButton(text=snow_text, callback_data="snow_start")],
                 [InlineKeyboardButton(text="🏆 Мои номинации", callback_data="ranking"),
                  InlineKeyboardButton(text="👤 Статистика", callback_data="stats")],
-                [InlineKeyboardButton(text="⏰ Напоминание", callback_data="rem_start")],
+                [InlineKeyboardButton(text="🎄 Моя ёлка", callback_data="tree_view"),
+                 InlineKeyboardButton(text="⏰ Напоминание", callback_data="rem:0:start")],
             ])
             await bot.edit_message_reply_markup(
                 chat_id=uid, message_id=msg_id, reply_markup=new_kb)
@@ -440,6 +441,18 @@ async def menu_refresher(bot) -> None:
     while True:
         await asyncio.sleep(60)
         await _refresh_all(bot)
+
+
+# ---------------------------------------------------------------- просмотр ёлки
+
+@router.callback_query(F.data == "tree_view")
+async def cb_tree_view(cb: CallbackQuery):
+    """🎄 Моя ёлка: показать фото текущего звания + прогресс."""
+    u = await get_user(cb.from_user.id)
+    if not u:
+        return
+    await send_tree_image(cb.bot, cb.from_user.id, u["ornaments"])
+    await cb.answer()
 
 
 # ---------------------------------------------------------------- старт / регистрация
