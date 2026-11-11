@@ -150,7 +150,7 @@ async def _text_message_inner(message: Message):
     uid = message.from_user.id
 
     # 1) Поиск по имени (для снежков): пользователь прислал имя после запроса
-    if _snow_search_pending.pop(uid, None):
+    if _snow_search_pending.discard(uid) is not None:
         query = (message.text or "").strip().lower()
         log.info("snow search: uid=%s query=%r", uid, query)
         if len(query) < 2:
