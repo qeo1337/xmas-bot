@@ -10,7 +10,7 @@ from aiogram.enums import ParseMode
 
 from config import Config
 from database import init_db, load_whitelist
-from handlers import router
+from handlers import router, menu_refresher
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -33,7 +33,15 @@ async def main():
     log.info("TG bot starting. Event: %s — %s (%s)",
              Config.EVENT_START, Config.EVENT_END, Config.TZ)
     await bot.delete_webhook(drop_pending_updates=True)
-    await dp.start_polling(bot)
+
+    # Фоновая задача: обновление кнопок меню раз в 60 сек
+    import asyncio
+    refresher_task = asyncio.create_task(menu_refresher(bot))
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        refresher_task.cancel()
 
 
 if __name__ == "__main__":

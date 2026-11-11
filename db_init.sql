@@ -22,8 +22,10 @@ CREATE TABLE IF NOT EXISTS users (
     snowballs_day    DATE,
     snowballs_sent   INTEGER NOT NULL DEFAULT 0,
     snowballs_recv   INTEGER NOT NULL DEFAULT 0,
-    blocked          BOOLEAN NOT NULL DEFAULT FALSE
+    blocked          BOOLEAN NOT NULL DEFAULT FALSE,
+    last_seen        TIMESTAMPTZ
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;  -- миграция
 
 CREATE TABLE IF NOT EXISTS achievements (
     tg_id       BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,

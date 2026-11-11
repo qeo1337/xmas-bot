@@ -22,6 +22,16 @@ from views import (admin_participants_text, admin_rating_text, admin_stats_text,
 
 router = Router()
 
+# Активные меню: uid -> message_id (для обновления кнопок фоновой задачей)
+active_menus: dict[int, int] = {}
+
+
+async def touch(uid: int):
+    """Обновить last_seen пользователя."""
+    async with pool().acquire() as conn:
+        await conn.execute("UPDATE users SET last_seen = now() WHERE tg_id = $1", uid)
+
+
 TG_COMMANDS = {"decor": "/decor", "snow": "/snow имя", "rank": "/top", "me": "/me"}
 
 # ---------------------------------------------------------------- финал ивента
@@ -233,10 +243,58 @@ async def show_menu(target, edit: bool = True) -> None:
     if edit and target.__class__.__name__ == "CallbackQuery":
         try:
             await target.message.edit_text(text, reply_markup=MENU_KEYBOARD)
+            active_menus[uid] = target.message.id
         except Exception:
-            await target.message.answer(text, reply_markup=MENU_KEYBOARD)
+            msg = await target.message.answer(text, reply_markup=MENU_KEYBOARD)
+            active_menus[uid] = msg.id
     else:
-        await target.answer(text, reply_markup=MENU_KEYBOARD)
+        msg = await target.answer(text, reply_markup=MENU_KEYBOARD)
+        active_menus[uid] = msg.id
+
+
+# ---------------------------------------------------------------- live-кнопки
+
+async def _refresh_all(bot) -> None:
+    """Обновить кнопки во всех активных меню: кулдаун шара + счётчик снежков."""
+    for uid, msg_id in list(active_menus.items()):
+        try:
+            u = await get_user(uid)
+            if not u or u["blocked"]:
+                continue
+            # Шар
+            if u["last_decor"]:
+                nxt = next_decor_at(u["last_decor"])
+                if nxt > now_local():
+                    decor_text = f"✨ Шар — {fmt_next_time(nxt)}"
+                else:
+                    decor_text = "✨ Повесить шар"
+            else:
+                decor_text = "✨ Повесить шар"
+            # Снежки
+            left = await snowball_left(uid)
+            if left > 0:
+                snow_text = f"❄️ Снежки ({left})"
+            else:
+                snow_text = "❄️ Завтра в 00:00 (МСК)"
+            new_kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=decor_text, callback_data="decor"),
+                 InlineKeyboardButton(text=snow_text, callback_data="snow_start")],
+                [InlineKeyboardButton(text="🏆 Мои номинации", callback_data="ranking"),
+                 InlineKeyboardButton(text="👤 Статистика", callback_data="stats")],
+            ])
+            await bot.edit_message_reply_markup(
+                chat_id=uid, message_id=msg_id, reply_markup=new_kb)
+        except Exception:
+            # message not modified / not found / user blocked — тихо
+            pass
+
+
+async def menu_refresher(bot) -> None:
+    """Фоновая задача: раз в 60 сек обновляет кнопки активных меню."""
+    import asyncio
+    while True:
+        await asyncio.sleep(60)
+        await _refresh_all(bot)
 
 
 # ---------------------------------------------------------------- старт / регистрация
@@ -251,6 +309,7 @@ async def cmd_start(message: Message):
     u = await get_user(uid)
 
     if u and not u["blocked"]:
+        await touch(uid)
         # Фото с подписью (звание + прогресс)
         await send_tree_image(message.bot, uid, u["ornaments"])
         # Меню с кнопками
@@ -301,6 +360,7 @@ async def cmd_start(message: Message):
 @router.callback_query(F.data == "decor")
 async def cb_decor(cb: CallbackQuery):
     uid = cb.from_user.id
+    await touch(uid)
     before = await get_user(uid)
     if not before or before["blocked"]:
         return
@@ -370,6 +430,7 @@ async def cb_snow_search(cb: CallbackQuery):
 @router.callback_query(F.data.startswith("snow:"))
 async def cb_snow_throw(cb: CallbackQuery):
     uid = cb.from_user.id
+    await touch(uid)
     target_id = int(cb.data.split(":")[1])
     res = await throw_snowball(uid, target_id)
     if not res["ok"]:
