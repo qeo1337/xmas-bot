@@ -127,6 +127,7 @@ async def cmd_reset_cancel(message: Message):
 
 
 # Ловим текстовый ответ на пароль/капчу — только если админ в состоянии сброса
+# ВАЖНО: зарегистрирован ПЕРЕД поиском, но проверяет состояние — если не в режиме сброса, пропускает
 @router.message(F.text & ~F.text.startswith("/"))
 async def cmd_reset_answer(message: Message):
     uid = message.from_user.id
@@ -154,6 +155,42 @@ async def cmd_reset_answer(message: Message):
         return
     del _reset_state[uid]
     await _do_reset_db(message)
+
+
+@router.message(F.text & ~F.text.startswith("/"))
+async def cb_snow_search_text(message: Message):
+    """Поиск по имени (для снежков): пользователь присылает имя, показываем совпадения."""
+    uid = message.from_user.id
+    if not _snow_search_pending.pop(uid, None):
+        return
+    query = (message.text or "").strip().lower()
+    if len(query) < 2:
+        await message.answer("❄️ Слишком коротко — минимум 2 буквы. Ещё раз:")
+        return
+    async with pool().acquire() as conn:
+        rows = await conn.fetch(
+            """SELECT tg_id, display_name, username FROM users
+               WHERE tg_id != $1 AND blocked = FALSE
+                 AND (LOWER(display_name) LIKE $2 OR LOWER(username) LIKE $2)
+               ORDER BY display_name NULLS LAST LIMIT 10""",
+            uid, f"{query}%")
+    if not rows:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")]])
+        await message.answer(f"⛔ Никого не нашлось по «{query[:30]}»", reply_markup=kb)
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text=esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}")[:40],
+            callback_data=f"snow:{r['tg_id']}")]
+        for r in rows])
+    kb.inline_keyboard.append([InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")])
+    await message.answer(f"❄️ Найдено по «{query[:30]}»:", reply_markup=kb)
+
+
+# Поиск по имени (для снежков): зарегистрирован ПОСЛЕ сброса БД
+# aiogram обрабатывает хендлеры в порядке регистрации — этот сработает,
+# если предыдущий (сброс БД) пропустил сообщение
 
 
 async def _do_reset_db(message: Message):
@@ -643,38 +680,7 @@ async def cb_menu(cb: CallbackQuery):
     await cb.answer()
 
 
-# Поиск по имени (для снежков): пользователь присылает имя, показываем совпадения
 _snow_search_pending: set[int] = set()
-
-
-@router.message(F.text & ~F.text.startswith("/"))
-async def cb_snow_search_text(message: Message):
-    uid = message.from_user.id
-    if not _snow_search_pending.pop(uid, None):
-        return
-    query = (message.text or "").strip().lower()
-    if len(query) < 2:
-        await message.answer("❄️ Слишком коротко — минимум 2 буквы. Ещё раз:")
-        return
-    async with pool().acquire() as conn:
-        rows = await conn.fetch(
-            """SELECT tg_id, display_name, username FROM users
-               WHERE tg_id != $1 AND blocked = FALSE
-                 AND (LOWER(display_name) LIKE $2 OR LOWER(username) LIKE $2)
-               ORDER BY display_name NULLS LAST LIMIT 10""",
-            uid, f"{query}%")
-    if not rows:
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")]])
-        await message.answer(f"⛔ Никого не нашлось по «{query[:30]}»", reply_markup=kb)
-        return
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}")[:40],
-            callback_data=f"snow:{r['tg_id']}")]
-        for r in rows])
-    kb.inline_keyboard.append([InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")])
-    await message.answer(f"❄️ Найдено по «{query[:30]}»:", reply_markup=kb)
 
 
 async def _snow_picker_kb(uid: int) -> InlineKeyboardMarkup:
