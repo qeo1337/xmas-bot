@@ -207,6 +207,7 @@ from views import tree_progress_line  # noqa: F401 (используется в 
 MENU_BUTTONS = [
     [("✨ Повесить шар", "decor"), ("❄️ Кинуть снежок", "snow_start")],
     [("🏆 Мои номинации", "ranking"), ("👤 Статистика", "stats")],
+    [("⏰ Напоминание", "rem_start")],
 ]
 
 MENU_KEYBOARD = InlineKeyboardMarkup(inline_keyboard=[
@@ -252,6 +253,114 @@ async def show_menu(target, edit: bool = True) -> None:
         active_menus[uid] = msg.id
 
 
+# ---------------------------------------------------------------- напоминания
+
+REMINDER_HOURS = list(range(10, 22))  # 10:00–21:00 МСК
+
+
+async def cb_reminder_start(cb: CallbackQuery):
+    """⏰ Напоминание: выбор режима."""
+    u = await get_user(cb.from_user.id)
+    if not u:
+        return
+    mode = u["reminder_mode"]
+    hours = u["reminder_hours"] or ""
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Раз в день", callback_data=f"rem:1:{hours}")],
+        [InlineKeyboardButton(text="2 раза в день", callback_data=f"rem:2:{hours}")],
+        [InlineKeyboardButton(text="3 раза в день", callback_data=f"rem:3:{hours}")],
+        [InlineKeyboardButton(text="Выключить", callback_data="rem:0")],
+    ])
+    text = "⏰ Напоминание: когда будить?\\nТекущий режим: "
+    if mode == 0:
+        text += "выключено"
+    else:
+        text += f"{mode} раз(а) в день"
+        if hours:
+            import json
+            try:
+                h = json.loads(hours)
+                text += f" ({', '.join(f'{x}:00' for x in h)} МСК)"
+            except:
+                pass
+    await cb.message.edit_text(text + ":\nВыбери режим:", reply_markup=kb)
+    await cb.answer()
+
+
+async def cb_reminder_set(cb: CallbackQuery):
+    """Выбор часов: 10–21 МСК."""
+    data = cb.data.split(":")
+    if len(data) < 3:
+        return
+    mode = int(data[1])
+    if mode == 0:
+        # Выключить
+        async with pool().acquire() as conn:
+            await conn.execute("UPDATE users SET reminder_mode = 0, reminder_hours = '' WHERE tg_id = $1", cb.from_user.id)
+        await cb.message.edit_text("⏰ Напоминания выключены.")
+        await cb.answer()
+        return
+    # Сколько часов выбрать
+    n = mode
+    # Показать кнопки часов
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"{h}:00", callback_data=f"remh:{n}:{h}")]
+        for h in REMINDER_HOURS])
+    await cb.message.edit_text(f"⏰ Выбери {n} час(а) для напоминания (МСК):", reply_markup=kb)
+    await cb.answer()
+
+
+# Состояние выбора часов: uid -> (n_needed, selected)
+_reminder_hours_pending: dict[int, tuple[int, list[int]]] = {}
+
+
+@router.callback_query(F.data.startswith("rem:"))
+async def cb_reminder_route(cb: CallbackQuery):
+    if cb.data == "rem_start":
+        return await cb_reminder_start(cb)
+    parts = cb.data.split(":")
+    if len(parts) >= 2 and parts[1].isdigit():
+        return await cb_reminder_set(cb)
+
+
+@router.callback_query(F.data.startswith("remh:"))
+async def cb_reminder_hour(cb: CallbackQuery):
+    uid = cb.from_user.id
+    parts = cb.data.split(":")
+    if len(parts) != 3:
+        return
+    n_needed = int(parts[1])
+    hour = int(parts[2])
+    if uid not in _reminder_hours_pending:
+        _reminder_hours_pending[uid] = (n_needed, [])
+    n_needed, selected = _reminder_hours_pending[uid]
+    if hour in selected:
+        selected.remove(hour)
+    else:
+        selected.append(hour)
+    if len(selected) >= n_needed:
+        # Готово — сохранить
+        import json
+        selected.sort()
+        async with pool().acquire() as conn:
+            await conn.execute(
+                "UPDATE users SET reminder_mode = $2, reminder_hours = $3 WHERE tg_id = $1",
+                uid, n_needed, json.dumps(selected))
+        del _reminder_hours_pending[uid]
+        times = ", ".join(f"{h}:00" for h in selected)
+        await cb.message.edit_text(f"⏰ Напоминания: {n_needed} раз(а) в день в {times} (МСК)")
+        await cb.answer()
+    else:
+        # Показать прогресс
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"{h}:00 {'✅' if h in selected else ''}", callback_data=f"remh:{n_needed}:{h}")]
+            for h in REMINDER_HOURS])
+        await cb.message.edit_text(
+            f"⏰ Выбрано: {len(selected)}/{n_needed} ({', '.join(f'{h}:00' for h in selected) if selected else '—'})\nВыбери ещё:",
+            reply_markup=kb)
+        await cb.answer("Выбрано")
+
+
 # ---------------------------------------------------------------- live-кнопки
 
 async def _refresh_all(bot) -> None:
@@ -281,12 +390,48 @@ async def _refresh_all(bot) -> None:
                  InlineKeyboardButton(text=snow_text, callback_data="snow_start")],
                 [InlineKeyboardButton(text="🏆 Мои номинации", callback_data="ranking"),
                  InlineKeyboardButton(text="👤 Статистика", callback_data="stats")],
+                [InlineKeyboardButton(text="⏰ Напоминание", callback_data="rem_start")],
             ])
             await bot.edit_message_reply_markup(
                 chat_id=uid, message_id=msg_id, reply_markup=new_kb)
         except Exception:
             # message not modified / not found / user blocked — тихо
             pass
+
+
+async def reminder_scheduler(bot) -> None:
+    """Фоновая задача: раз в 5 мин проверяет, кому отправлять напоминание."""
+    import asyncio, json
+    last_sent: dict[int, str] = {}  # uid -> "HH:MM" (чтобы не слать дважды)
+    while True:
+        await asyncio.sleep(300)
+        now = now_local()
+        now_hm = now.strftime("%H:%M")
+        async with pool().acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT tg_id, reminder_mode, reminder_hours, ornaments, streak
+                   FROM users
+                   WHERE reminder_mode > 0 AND blocked = FALSE""")
+        for u in rows:
+            try:
+                hours = json.loads(u["reminder_hours"] or "[]")
+                if not hours:
+                    continue
+                for h in hours:
+                    target_hm = f"{h:02d}:00"
+                    # Если сейчас этот час и ещё не слано
+                    if now.hour == h and now.minute < 15:  # окно 15 мин
+                        key = f"{u['tg_id']}:{target_hm}"
+                        if last_sent.get(key) == now.strftime("%Y-%m-%d"):
+                            continue
+                        # Отправить
+                        msg = (f"⏰ Ёлка ждёт!\n"
+                               f"У тебя {u['ornaments']} шар(а/ов), серия {u['streak']} дн.\n"
+                               f"Повесь шар и закинь снежок ❄️")
+                        await bot.send_message(u["tg_id"], msg)
+                        last_sent[key] = now.strftime("%Y-%m-%d")
+            except Exception:
+                pass
 
 
 async def menu_refresher(bot) -> None:

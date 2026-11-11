@@ -23,9 +23,13 @@ CREATE TABLE IF NOT EXISTS users (
     snowballs_sent   INTEGER NOT NULL DEFAULT 0,
     snowballs_recv   INTEGER NOT NULL DEFAULT 0,
     blocked          BOOLEAN NOT NULL DEFAULT FALSE,
-    last_seen        TIMESTAMPTZ
+    last_seen        TIMESTAMPTZ,
+    reminder_mode    INTEGER NOT NULL DEFAULT 0,  -- 0=off, 1/2/3 = раз в день
+    reminder_hours   TEXT                         -- JSON: [12, 18] или ""
 );
-ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;  -- миграция
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder_mode INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS reminder_hours TEXT DEFAULT '';
 
 CREATE TABLE IF NOT EXISTS achievements (
     tg_id       BIGINT NOT NULL REFERENCES users(tg_id) ON DELETE CASCADE,
