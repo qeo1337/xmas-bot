@@ -126,71 +126,65 @@ async def cmd_reset_cancel(message: Message):
         await message.answer("❌ Сброс отменён.")
 
 
-# Ловим текстовый ответ на пароль/капчу — только если админ в состоянии сброса
-# ВАЖНО: зарегистрирован ПЕРЕД поиском, но проверяет состояние — если не в режиме сброса, пропускает
+# Единственный текстовый хендлер (кроме команд).
+# ВАЖНО: в aiogram 3 update забирает ПЕРВЫЙ сработавший хендлер — даже если он
+# вернул None. Поэтому здесь, в одной функции, сначала проверяем поиск по имени
+# (был ли запрос через «🔍 Поиск по имени»), потом сброс БД (админ в состоянии).
 @router.message(F.text & ~F.text.startswith("/"))
-async def cmd_reset_answer(message: Message):
+async def text_message_router(message: Message):
     uid = message.from_user.id
-    if uid not in _reset_state or not is_admin(uid):
-        return  # не наш случай — пропускаем дальше
-    stage, expected, expires = _reset_state[uid]
-    if datetime.datetime.now() > expires:
-        del _reset_state[uid]
-        await message.answer("⏰ Подтверждение истекло (2 мин). Начните заново: /delete_db")
-        return
-    text = (message.text or "").strip()
-    if stage == "password":
-        if not secrets.compare_digest(text, DB_RESET_PASSWORD):
-            del _reset_state[uid]
-            await message.answer("❌ Неверный пароль. Попробуйте снова: /delete_db")
+
+    # 1) Поиск по имени (для снежков): пользователь прислал имя после запроса
+    if _snow_search_pending.pop(uid, None):
+        query = (message.text or "").strip().lower()
+        if len(query) < 2:
+            await message.answer("❄️ Слишком коротко — минимум 2 буквы. Ещё раз:")
             return
-        a, b = random.randint(10, 99), random.randint(10, 99)
-        _reset_state[uid] = ("captcha", str(a + b), datetime.datetime.now() + datetime.timedelta(minutes=2))
-        await message.answer(f"Шаг 2/2: капча. Сколько будет {a} + {b}?\nОтмена: /cancel")
-        return
-    # captcha
-    if text != expected:
-        del _reset_state[uid]
-        await message.answer("❌ Неверный ответ капчи. Попробуйте снова: /delete_db")
-        return
-    del _reset_state[uid]
-    await _do_reset_db(message)
-
-
-@router.message(F.text & ~F.text.startswith("/"))
-async def cb_snow_search_text(message: Message):
-    """Поиск по имени (для снежков): пользователь присылает имя, показываем совпадения."""
-    uid = message.from_user.id
-    if not _snow_search_pending.pop(uid, None):
-        return
-    query = (message.text or "").strip().lower()
-    if len(query) < 2:
-        await message.answer("❄️ Слишком коротко — минимум 2 буквы. Ещё раз:")
-        return
-    async with pool().acquire() as conn:
-        rows = await conn.fetch(
-            """SELECT tg_id, display_name, username FROM users
-               WHERE tg_id != $1 AND blocked = FALSE
-                 AND (LOWER(display_name) LIKE $2 OR LOWER(username) LIKE $2)
-               ORDER BY display_name NULLS LAST LIMIT 10""",
-            uid, f"{query}%")
-    if not rows:
+        async with pool().acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT tg_id, display_name, username FROM users
+                   WHERE tg_id != $1 AND blocked = FALSE
+                     AND (LOWER(display_name) LIKE $2 OR LOWER(username) LIKE $2)
+                   ORDER BY display_name NULLS LAST LIMIT 10""",
+                uid, f"{query}%")
+        if not rows:
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")]])
+            await message.answer(f"⛔ Никого не нашлось по «{query[:30]}»", reply_markup=kb)
+            return
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")]])
-        await message.answer(f"⛔ Никого не нашлось по «{query[:30]}»", reply_markup=kb)
+            [InlineKeyboardButton(
+                text=esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}")[:40],
+                callback_data=f"snow:{r['tg_id']}")]
+            for r in rows])
+        kb.inline_keyboard.append([InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")])
+        await message.answer(f"❄️ Найдено по «{query[:30]}»:", reply_markup=kb)
         return
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(
-            text=esc((r["display_name"] or r["username"]) or f"id{r['tg_id']}")[:40],
-            callback_data=f"snow:{r['tg_id']}")]
-        for r in rows])
-    kb.inline_keyboard.append([InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")])
-    await message.answer(f"❄️ Найдено по «{query[:30]}»:", reply_markup=kb)
 
-
-# Поиск по имени (для снежков): зарегистрирован ПОСЛЕ сброса БД
-# aiogram обрабатывает хендлеры в порядке регистрации — этот сработает,
-# если предыдущий (сброс БД) пропустил сообщение
+    # 2) Ответ на пароль/капчу при /delete_db — только если админ в состоянии сброса
+    if uid in _reset_state and is_admin(uid):
+        stage, expected, expires = _reset_state[uid]
+        if datetime.datetime.now() > expires:
+            del _reset_state[uid]
+            await message.answer("⏰ Подтверждение истекло (2 мин). Начните заново: /delete_db")
+            return
+        text = (message.text or "").strip()
+        if stage == "password":
+            if not secrets.compare_digest(text, DB_RESET_PASSWORD):
+                del _reset_state[uid]
+                await message.answer("❌ Неверный пароль. Попробуйте снова: /delete_db")
+                return
+            a, b = random.randint(10, 99), random.randint(10, 99)
+            _reset_state[uid] = ("captcha", str(a + b), datetime.datetime.now() + datetime.timedelta(minutes=2))
+            await message.answer(f"Шаг 2/2: капча. Сколько будет {a} + {b}?\nОтмена: /cancel")
+            return
+        # captcha
+        if text != expected:
+            del _reset_state[uid]
+            await message.answer("❌ Неверный ответ капчи. Попробуйте снова: /delete_db")
+            return
+        del _reset_state[uid]
+        await _do_reset_db(message)
 
 
 async def _do_reset_db(message: Message):

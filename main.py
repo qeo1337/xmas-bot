@@ -10,7 +10,7 @@ from aiogram.enums import ParseMode
 
 from config import Config
 from database import init_db, load_whitelist
-from handlers import router
+from handlers import router, reminder_scheduler
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -34,7 +34,13 @@ async def main():
              Config.EVENT_START, Config.EVENT_END, Config.TZ)
     await bot.delete_webhook(drop_pending_updates=True)
 
-    await dp.start_polling(bot)
+    # Пользовательские напоминания (раз в 5 мин проверяет, кому отправить)
+    reminder_task = asyncio.create_task(reminder_scheduler(bot))
+
+    try:
+        await dp.start_polling(bot)
+    finally:
+        reminder_task.cancel()
 
 
 if __name__ == "__main__":
