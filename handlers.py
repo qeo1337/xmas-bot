@@ -20,7 +20,10 @@ from views import tree_progress_line
 from views import (admin_participants_text, admin_rating_text, admin_stats_text,
                    menu_text, my_ranking_text, name_of, stats_text, esc)
 
+import logging
+
 router = Router()
+log = logging.getLogger("xmas-bot.handlers")
 
 # Активные меню: uid -> message_id (для обновления кнопок фоновой задачей)
 active_menus: dict[int, int] = {}
@@ -132,11 +135,24 @@ async def cmd_reset_cancel(message: Message):
 # (был ли запрос через «🔍 Поиск по имени»), потом сброс БД (админ в состоянии).
 @router.message(F.text & ~F.text.startswith("/"))
 async def text_message_router(message: Message):
+    try:
+        await _text_message_inner(message)
+    except Exception:
+        log.exception("text handler failed for uid=%s text=%r",
+                      message.from_user.id, (message.text or "")[:50])
+        try:
+            await message.answer("⛔ Ошибка при обработке. Попробуй ещё раз.")
+        except Exception:
+            pass
+
+
+async def _text_message_inner(message: Message):
     uid = message.from_user.id
 
     # 1) Поиск по имени (для снежков): пользователь прислал имя после запроса
     if _snow_search_pending.pop(uid, None):
         query = (message.text or "").strip().lower()
+        log.info("snow search: uid=%s query=%r", uid, query)
         if len(query) < 2:
             await message.answer("❄️ Слишком коротко — минимум 2 буквы. Ещё раз:")
             return
@@ -147,6 +163,7 @@ async def text_message_router(message: Message):
                      AND (LOWER(display_name) LIKE $2 OR LOWER(username) LIKE $2)
                    ORDER BY display_name NULLS LAST LIMIT 10""",
                 uid, f"{query}%")
+        log.info("snow search: uid=%s query=%r -> %d rows", uid, query, len(rows))
         if not rows:
             kb = InlineKeyboardMarkup(inline_keyboard=[
                 [InlineKeyboardButton(text="⬅️ К списку", callback_data="snow_start")]])
@@ -614,6 +631,7 @@ async def cb_snow_search(cb: CallbackQuery):
     """🔍 Поиск: пользователь присылает имя — показываем совпадения кнопками."""
     await cb.answer("Пришли имя (или начало имени) — например: «Марк»", show_alert=True)
     _snow_search_pending.add(cb.from_user.id)
+    log.info("snow search: pending added uid=%s", cb.from_user.id)
 
 
 @router.callback_query(F.data.startswith("snow:"))
