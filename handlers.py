@@ -321,7 +321,7 @@ async def cb_reminder_start(cb: CallbackQuery):
         [InlineKeyboardButton(text="3 раза в день", callback_data=f"rem:3:{hours}")],
         [InlineKeyboardButton(text="Выключить", callback_data="rem:0")],
     ])
-    text = "⏰ Напоминание: когда будить?\\nТекущий режим: "
+    text = "⏰ Напоминание: когда будить?\nТекущий режим: "
     if mode == 0:
         text += "выключено"
     else:
