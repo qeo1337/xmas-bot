@@ -305,6 +305,7 @@ async def show_menu(target, edit: bool = True) -> None:
 # ---------------------------------------------------------------- напоминания
 
 REMINDER_HOURS = list(range(10, 22))  # 10:00–21:00 МСК
+TEST_HOUR = 9  # тестовый слот (9:00 МСК), отдельная кнопка
 
 
 async def cb_reminder_start(cb: CallbackQuery):
@@ -352,9 +353,10 @@ async def cb_reminder_set(cb: CallbackQuery):
     # Сколько часов выбрать
     n = mode
     # Показать кнопки часов
-    kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"{h}:00", callback_data=f"remh:{n}:{h}")]
-        for h in REMINDER_HOURS])
+    kb_rows = [[InlineKeyboardButton(text=f"{h}:00", callback_data=f"remh:{n}:{h}")]
+               for h in REMINDER_HOURS]
+    kb_rows.append([InlineKeyboardButton(text=f"{TEST_HOUR}:00 (тест)", callback_data=f"remh:{n}:{TEST_HOUR}")])
+    kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     await cb.message.edit_text(f"⏰ Выбери {n} час(а) для напоминания (МСК):", reply_markup=kb)
     await cb.answer()
 
@@ -401,11 +403,13 @@ async def cb_reminder_hour(cb: CallbackQuery):
         await cb.answer()
     else:
         # Показать прогресс
-        kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"{h}:00 {'✅' if h in selected else ''}", callback_data=f"remh:{n_needed}:{h}")]
-            for h in REMINDER_HOURS])
+        kb_rows = [[InlineKeyboardButton(text=f"{h}:00 {'✅' if h in selected else ''}", callback_data=f"remh:{n_needed}:{h}")]
+                   for h in REMINDER_HOURS]
+        kb_rows.append([InlineKeyboardButton(text=f"{TEST_HOUR}:00 (тест) {'✅' if TEST_HOUR in selected else ''}",
+                                              callback_data=f"remh:{n_needed}:{TEST_HOUR}")])
+        kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
         await cb.message.edit_text(
-            f"⏰ Выбрано: {len(selected)}/{n_needed} ({', '.join(f'{h}:00' for h in selected) if selected else '—'})\nВыбери ещё:",
+            f"⏰ Выбрано: {len(selected)}/{n_needed} ({', '.join(f'{h}:00' for h in sorted(selected)) if selected else '—'})\nВыбери ещё:",
             reply_markup=kb)
         await cb.answer("Выбрано")
 
@@ -469,12 +473,22 @@ async def reminder_scheduler(bot) -> None:
                     continue
                 for h in hours:
                     target_hm = f"{h:02d}:00"
-                    # Если сейчас этот час и ещё не слано
-                    if now.hour == h and now.minute < 15:  # окно 15 мин
+                    # Тестовый час — отправляем сразу при следующем прогоне (раз в 5 мин)
+                    if h == TEST_HOUR:
+                        key = f"{u['tg_id']}:test"
+                        if last_sent.get(key) == now.strftime("%Y-%m-%d"):
+                            continue
+                        msg = (f"🧪 ТЕСТ напоминания!\n"
+                               f"У тебя {u['ornaments']} шар(а/ов), серия {u['streak']} дн.\n"
+                               f"Это тестовое напоминание — проверь, что пришло.")
+                        await bot.send_message(u["tg_id"], msg)
+                        last_sent[key] = now.strftime("%Y-%m-%d")
+                        continue
+                    # Обычный час: если сейчас этот час и ещё не слано (окно 15 мин)
+                    if now.hour == h and now.minute < 15:
                         key = f"{u['tg_id']}:{target_hm}"
                         if last_sent.get(key) == now.strftime("%Y-%m-%d"):
                             continue
-                        # Отправить
                         msg = (f"⏰ Ёлка ждёт!\n"
                                f"У тебя {u['ornaments']} шар(а/ов), серия {u['streak']} дн.\n"
                                f"Повесь шар и закинь снежок ❄️")
