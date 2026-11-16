@@ -25,7 +25,7 @@ def name_of(u) -> str:
 def event_phase(now=None) -> str:
     now = now or now_local()
     if now.date() > Config.EVENT_END:
-        return "🏁 Ивент завершён."
+        return "🏁 Ивент завершён"
     if now.date() < Config.EVENT_START:
         return f"⏳ Игра начнётся {Config.EVENT_START.strftime('%d.%m.%Y')}!"
     return ""
@@ -146,7 +146,7 @@ async def admin_participants_text() -> str:
                FROM users ORDER BY registered_at""")
         wl = await conn.fetchval("SELECT COUNT(*) FROM whitelist")
     if not rows:
-        return f"Whitelist: {wl}. Пока никто не зарегистрировался."
+        return f"Whitelist: {wl}. Пока никто не зарегистрировался"
     lines = [f"Whitelist: {wl} | Зарегистрировано: {len(rows)}\n"]
     for r in rows:
         mark = "⛔" if r["blocked"] else "✅"

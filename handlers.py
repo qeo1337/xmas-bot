@@ -305,7 +305,6 @@ async def show_menu(target, edit: bool = True) -> None:
 # ---------------------------------------------------------------- напоминания
 
 REMINDER_HOURS = list(range(10, 22))  # 10:00–21:00 МСК
-TEST_HOUR = 9  # тестовый слот (9:00 МСК), отдельная кнопка
 
 
 async def cb_reminder_start(cb: CallbackQuery):
@@ -355,7 +354,6 @@ async def cb_reminder_set(cb: CallbackQuery):
     # Показать кнопки часов
     kb_rows = [[InlineKeyboardButton(text=f"{h}:00", callback_data=f"remh:{n}:{h}")]
                for h in REMINDER_HOURS]
-    kb_rows.append([InlineKeyboardButton(text=f"{TEST_HOUR}:00 (тест)", callback_data=f"remh:{n}:{TEST_HOUR}")])
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     await cb.message.edit_text(f"⏰ Выбери {n} час(а) для напоминания (МСК):", reply_markup=kb)
     await cb.answer()
@@ -405,8 +403,6 @@ async def cb_reminder_hour(cb: CallbackQuery):
         # Показать прогресс
         kb_rows = [[InlineKeyboardButton(text=f"{h}:00 {'✅' if h in selected else ''}", callback_data=f"remh:{n_needed}:{h}")]
                    for h in REMINDER_HOURS]
-        kb_rows.append([InlineKeyboardButton(text=f"{TEST_HOUR}:00 (тест) {'✅' if TEST_HOUR in selected else ''}",
-                                              callback_data=f"remh:{n_needed}:{TEST_HOUR}")])
         kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
         await cb.message.edit_text(
             f"⏰ Выбрано: {len(selected)}/{n_needed} ({', '.join(f'{h}:00' for h in sorted(selected)) if selected else '—'})\nВыбери ещё:",
@@ -473,17 +469,6 @@ async def reminder_scheduler(bot) -> None:
                     continue
                 for h in hours:
                     target_hm = f"{h:02d}:00"
-                    # Тестовый час — отправляем сразу при следующем прогоне (раз в 5 мин)
-                    if h == TEST_HOUR:
-                        key = f"{u['tg_id']}:test"
-                        if last_sent.get(key) == now.strftime("%Y-%m-%d"):
-                            continue
-                        msg = (f"🧪 ТЕСТ напоминания!\n"
-                               f"У тебя {u['ornaments']} шар(а/ов), серия {u['streak']} дн.\n"
-                               f"Это тестовое напоминание — проверь, что пришло.")
-                        await bot.send_message(u["tg_id"], msg)
-                        last_sent[key] = now.strftime("%Y-%m-%d")
-                        continue
                     # Обычный час: если сейчас этот час и ещё не слано (окно 15 мин)
                     if now.hour == h and now.minute < 15:
                         key = f"{u['tg_id']}:{target_hm}"
@@ -658,7 +643,7 @@ async def cb_snow_throw(cb: CallbackQuery):
     if not res["ok"]:
         msg = {"no_snowballs": "❄️ Снежков больше нет. Новые — завтра в 00:00 (МСК).",
                "no_target": "⛔ Участник не найден.",
-               "target_blocked": "⛔ Участник заблокирован."}.get(res["error"], "⛔ Ошибка")
+               "target_blocked": "⛔ Участник заблокирован"}.get(res["error"], "⛔ Ошибка")
         await cb.answer(msg, show_alert=True)
         return
     await cb.answer()
@@ -919,7 +904,7 @@ async def cmd_admin_register(message: Message, command: CommandObject):
                VALUES ($1, $2, $3, $4) ON CONFLICT (tg_id) DO NOTHING""",
             tg_id, disp, Config.SNOWBALLS_PER_DAY, now_local().date())
     await log_event(message.from_user.id, "", "admin_register", f"id{tg_id} {disp}")
-    await message.answer(f"✅ id{tg_id} ({disp}) зарегистрирован(а).")
+    await message.answer(f"✅ id{tg_id} ({disp}) зарегистрирован(а)")
 
 
 @router.message(Command("admin_block"))
@@ -932,7 +917,7 @@ async def cmd_admin_block(message: Message, command: CommandObject):
     async with pool().acquire() as conn:
         await conn.execute("UPDATE users SET blocked = TRUE WHERE tg_id = $1",
                            int(command.args.strip()))
-    await message.answer("⛔ Участник заблокирован.")
+    await message.answer("⛔ Участник заблокирован")
 
 
 @router.message(Command("admin_unblock"))
@@ -945,7 +930,7 @@ async def cmd_admin_unblock(message: Message, command: CommandObject):
     async with pool().acquire() as conn:
         await conn.execute("UPDATE users SET blocked = FALSE WHERE tg_id = $1",
                            int(command.args.strip()))
-    await message.answer("✅ Участник разблокирован.")
+    await message.answer("✅ Участник разблокирован")
 
 
 @router.message(Command("admin_orbs"))
@@ -966,16 +951,16 @@ async def cmd_admin_orbs(message: Message, command: CommandObject):
         u = await conn.fetchrow(
             "SELECT tg_id, username, ornaments FROM users WHERE LOWER(username) = $1", uname)
         if not u:
-            await message.answer(f"⛔ Участник @{uname} не найден.")
+            await message.answer(f"⛔ Участник @{uname} не найден")
             return
         new_orbs = u["ornaments"] + delta
         if new_orbs < 0:
-            await message.answer(f"⛔ Нельзя убрать больше шаров, чем у участника (сейчас {u['ornaments']}).")
+            await message.answer(f"⛔ Нельзя убрать больше шаров, чем у участника (сейчас {u['ornaments']})")
             return
         await conn.execute(
             "UPDATE users SET ornaments = $2 WHERE tg_id = $1", u["tg_id"], new_orbs)
         await log_event(message.from_user.id, uname, "admin_orbs", f"{delta:+d} -> {new_orbs}")
-    await message.answer(f"✅ @{uname}: {u['ornaments']} {delta:+d} → {new_orbs} шаров.")
+    await message.answer(f"✅ @{uname}: {u['ornaments']} {delta:+d} → {new_orbs} шаров")
 
 
 @router.message(Command("admin_log"))
@@ -989,7 +974,7 @@ async def cmd_admin_log(message: Message, command: CommandObject):
         rows = await conn.fetch(
             "SELECT ts, username, action, details FROM event_log ORDER BY ts DESC LIMIT $1", n)
     if not rows:
-        await message.answer("Лог пуст.")
+        await message.answer("Лог пуст")
         return
     await message.answer("📜 Лог:\n" + "\n".join(
         f"· {r['ts'].strftime('%d.%m %H:%M')} {r['username'] or '—'}: {r['action']} {r['details'] or ''}"
