@@ -124,9 +124,9 @@ async def admin_rating_text(limit: int = 5) -> str:
     text = f"📊 Админ-рейтинг (топ-{limit}, полные данные)\n"
     for title, kind, fmt in [
         ("🎄 Ёлки (шары)", "ornaments", "{} шаров"),
-        ("🎯 Снайперы", "snipers", "{} ❄️"),
+        ("🎯 Снайпер", "snipers", "{} ❄️"),
         ("🌟 Декоратор (серия)", "decorators", "серия {}"),
-        ("☃️ Снеговики", "snowmen", "{} ❄️"),
+        ("☃️ Снеговик", "snowmen", "{} ❄️"),
     ]:
         text += f"\n{title}\n"
         rows = await leaderboard(kind, limit)

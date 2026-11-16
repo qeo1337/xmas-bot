@@ -64,11 +64,11 @@ async def _final_text(bot, uid: int) -> str:
         for title, place, value in wins:
             medal = {1: "🥇", 2: "🥈", 3: "🥉"}[place]
             lines.append(f"{medal} {title} — {place} место")
-        lines.append("\nСпасибо, что участвовал — это было здорово! 🎄")
+        lines.append("\nСпасибо за красивые ёлки и меткие снежки — это было здорово! 🎄")
         return "\n".join(lines)
     return ("🎄 Новогодний ивент завершён!\n\n"
             "Спасибо за участие — ёлки, снежки, серии. "
-            "Результаты объявим, а пока — отдыхай и готовься к следующему ивенту! 🎅")
+            "Скоро объявим результаты, а пока — отдыхай и готовься к следующему ивенту! 🎅")
 
 
 @router.message(Command("admin_final_broadcast"))
@@ -543,15 +543,15 @@ async def cmd_start(message: Message):
 
     if not allowed:
         await message.answer(
-            "😔 К сожалению, вы не можете принять участие в этом ивенте.\n"
-            "Если это ошибка — напишите организатору.")
+            "😔 Кажется, тебя нет в списке участников ивента.\n"
+            "Если ты думаешь, что это ошибка — напиши организатору.")
         await log_event(uid, uname or "?", "start_denied")
         return
 
     if state == "before":
         await message.answer(
             "🎄 Привет! Это бот новогоднего ивента.\n"
-            f"Регистрация откроется {Config.REGISTRATION_START.strftime('%d.%m.%Y')}.")
+            f"Регистрация откроется {Config.REGISTRATION_START.strftime('%d.%m.%Y')}. Загляни к нам чуть позже!")
         return
     if state == "closed" and uid not in Config.ADMIN_IDS:
         await message.answer("🔒 Регистрация на ивент закрыта.")
@@ -568,8 +568,8 @@ async def cmd_start(message: Message):
         "🎄 Добро пожаловать в новогодний ивент!\n"
         "✅ Регистрация прошла успешно.\n"
         "🏅 Достижение получено: 🎄 «Я в деле!»\n"
-        + (f"С {Config.EVENT_START.strftime('%d.%m')} начинается игра."
-           if now.date() < Config.EVENT_START else "Игра уже идёт — вперёд!"))
+        + (f"Игра стартует {Config.EVENT_START.strftime('%d.%m')}."
+           if now.date() < Config.EVENT_START else "Игра уже идёт — скорее наряжай ёлку!"))
     # Фото с подписью
     await send_tree_image(message.bot, uid, 0)
     # Меню с кнопками
@@ -663,14 +663,14 @@ async def cb_snow_throw(cb: CallbackQuery):
         return
     await cb.answer()
     me = await get_user(uid)
-    await cb.message.edit_text(f"❄️ Вы закидали снежком: {esc(res['target_display'])}!")
+    await cb.message.edit_text(f"❄️ Готово! {esc(res['target_display'])} теперь весь в снегу!")
     await log_event(uid, me["username"] or "", "snowball_sent", f"to id{target_id}")
     new_ach = await check_achievements(uid)
     if new_ach:
         await cb.message.answer("🏅 Достижения: " + ", ".join(new_ach))
     try:
         await cb.bot.send_message(
-            target_id, f"❄️ В вас прилетел снежок от {name_of(me)}!")
+            target_id, f"❄️ Ой, в тебя прилетел снежок от {name_of(me)}!")
     except Exception:
         pass
 
@@ -786,13 +786,13 @@ async def cmd_snow(message: Message, command: CommandObject):
                               "no_target": "⛔ Участник не найден."}.get(res["error"], "⛔ Ошибка"))
         return
     me = await get_user(uid)
-    await message.answer("❄️ Вы закидали снежком: " + esc(res["target_display"]) + "!")
+    await message.answer("❄️ Готово! " + esc(res["target_display"]) + " теперь весь в снегу!")
     await log_event(uid, me["username"] or "", "snowball_sent", f"to id{t['tg_id']}")
     new_ach = await check_achievements(uid)
     if new_ach:
         await message.answer("🏅 Достижения: " + ", ".join(new_ach))
     try:
-        await message.bot.send_message(t["tg_id"], f"❄️ В вас прилетел снежок от {name_of(me)}!")
+        await message.bot.send_message(t["tg_id"], f"❄️ Ой, в тебя прилетел снежок от {name_of(me)}!")
     except Exception:
         pass
 
