@@ -198,12 +198,12 @@ def next_tree_tier(ornaments: int):
 def tree_progress_line(ornaments: int) -> str:
     """«Текущее звание — сколько шаров до следующего»."""
     if ornaments <= 0:
-        return "🎄 Стартовая ёлочка — повесь первый шар, чтобы начать наряжать!"
+        return "Стартовая ёлочка — повесь первый шар, чтобы начать наряжать!"
     nxt = next_tree_tier(ornaments)
     if nxt is None:
-        return f"🎄 {tree_title(ornaments)} — высшее звание достигнуто! 🏆"
+        return f"{tree_title(ornaments)} — высшее звание достигнуто! 🏆"
     nxt_code, nxt_thr = nxt
-    return (f"🎄 {tree_title(ornaments)} — до {TIER_TITLES[nxt_code]} "
+    return (f"{tree_title(ornaments)} — до {TIER_TITLES[nxt_code]} "
             f"нужно ещё {nxt_thr - ornaments} шар(а/ов)")
 
 

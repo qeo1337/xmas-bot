@@ -80,7 +80,7 @@ async def stats_text(u) -> str:
         f"☃️ Получено снежков: {u['snowballs_recv']}\n\n"
         f"🏅 Достижения ({len(ach)}/{len(ACH_DEFS)}):\n")
     tail = "\n".join(
-        f"✅ {esc(t)}" if t in ach else "❌ ***"
+        f"✅ {esc(t)}" if t in ach else "• ***"
         for t in [d[0] for d in ACH_DEFS.values()])
     return head + tail
 

@@ -319,6 +319,7 @@ async def cb_reminder_start(cb: CallbackQuery):
         [InlineKeyboardButton(text="2 раза в день", callback_data=f"rem:2:{hours}")],
         [InlineKeyboardButton(text="3 раза в день", callback_data=f"rem:3:{hours}")],
         [InlineKeyboardButton(text="Выключить", callback_data="rem:0")],
+        [InlineKeyboardButton(text="← В меню", callback_data="menu")],
     ])
     text = "⏰ Напоминание: когда будить?\nТекущий режим: "
     if mode == 0:
@@ -354,6 +355,7 @@ async def cb_reminder_set(cb: CallbackQuery):
     # Показать кнопки часов
     kb_rows = [[InlineKeyboardButton(text=f"{h}:00", callback_data=f"remh:{n}:{h}")]
                for h in REMINDER_HOURS]
+    kb_rows.append([InlineKeyboardButton(text="← Назад", callback_data="rem:0:start")])
     kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
     await cb.message.edit_text(f"⏰ Выбери {n} час(а) для напоминания (МСК):", reply_markup=kb)
     await cb.answer()
@@ -403,6 +405,7 @@ async def cb_reminder_hour(cb: CallbackQuery):
         # Показать прогресс
         kb_rows = [[InlineKeyboardButton(text=f"{h}:00 {'✅' if h in selected else ''}", callback_data=f"remh:{n_needed}:{h}")]
                    for h in REMINDER_HOURS]
+        kb_rows.append([InlineKeyboardButton(text="← Назад", callback_data="rem:0:start")])
         kb = InlineKeyboardMarkup(inline_keyboard=kb_rows)
         await cb.message.edit_text(
             f"⏰ Выбрано: {len(selected)}/{n_needed} ({', '.join(f'{h}:00' for h in sorted(selected)) if selected else '—'})\nВыбери ещё:",
