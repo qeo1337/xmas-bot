@@ -1,7 +1,40 @@
 # Whitelist новогоднего ивента.
 # Одна строка = один участник: username без @ (регистр не важен).
 # Строки, начинающиеся с #, игнорируются.
-qeo1337
-mrmwmb
-xxarde
-ImormorI
+# Формат: username|Имя Фамилия
+NataliaBurtseva|Бурцева Наталья
+e_shchanova|Щанова Евгения
+dragon_grl|Стасюк Екатерина
+DaryaPoluyanova_1|Полуянова Дарья
+kamillla12|Аюпова Камилла
+ginqi|Галкина Ольга
+voron1sh|Воронин Федор
+alencha_sokol|Соколова Алена
+lenaachee|Иванова Елена
+Julea_konstantinova|Константинова Юлия
+KaterinaMin01|Минко Екатерина
+MuccXJle6|Шляпина Елена
+katerinaget19|Гетманова Екатерина
+daryaakovalenko|Кочкина Дарья
+kristinech|Клиндухова Кристина
+annaaipova1|Евдашкина Анна
+inblz|Никушина София
+St_tory|Ямалдинов Руслан
+alisagalla|Галла Алиса
+iNSa_Nia|Минин Артём
+Kagorim|Кузнецова Анастасия
+AnnaKalisto|Бадзагуа Анна
+AmadeusGoethe|Григорьева Екатерина
+JuliyaV1991|Варфоломеева Юлия
+opl161|Литвинова Ольга
+pancakeker|Веретина Софья
+oceanmorey|Малолыченко Юлия
+mrmwmb|Ситник Таисия
+malinamayy|Калимуллина Алина
+lastlumine|Матвеева Алина
+liaalilium|Громова Ирина
+ImormorI|Лопанская Лилия
+chillifriend|Евстигнеева Олеся
+dtnmll|Клименко Алина
+dntkllm1st|Алешечкина Анастасия
+xxarde|Симененко Кирилл
